@@ -135,7 +135,9 @@ class RoombaUtils:
             pretty_state['ready_msg'] = 'Ready: ' + {
                 0  : 'Okay',
                 2  : 'Uneven Ground',
+                7  : 'Bin Detached',
                 15 : 'Low Battery',
+                16 : 'Bin Full',
                 39 : 'Pending',
                 48 : 'Path Blocked',
             }[reported['cleanMissionStatus']['notReady']]
