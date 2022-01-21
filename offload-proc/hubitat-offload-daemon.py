@@ -7,6 +7,7 @@ import argparse
 import random
 import datetime
 import tempfile
+import requests
 
 import email
 from email.mime.base import MIMEBase
@@ -26,6 +27,9 @@ def get_host_ip_addr():
 
 RPC_PORT = 4226
 
+# ---------------------------------------
+#   Email Utilities
+# ---------------------------------------
 class EmailUtils:
     @staticmethod
     def _send_msg(msg):
@@ -103,15 +107,120 @@ def rpc_email_web_snapshot(email_addr, subject, page_url, page_wd, page_ht, load
     driver.quit()
     logging.info('rpc_email_web_snapshot: Finished successfully')
 
+# ---------------------------------------
+#   Roomba Utilities
+# ---------------------------------------
+class RoombaUtils:
+    STATE_URL = 'http://localhost:8200/api/local/info/state'
+    ACTION_URL_BASE = 'http://localhost:8200/api/local/action/'
+
+    @staticmethod
+    def get_full_state():
+        response = requests.get(RoombaUtils.STATE_URL)
+        return response.json()
+
+    @staticmethod
+    def get_reduced_state():
+        full = RoombaUtils.get_full_state()
+        reported = full["state"]["reported"]
+        pretty_state = {
+            'name': reported['name'],
+            'battery': reported['batPct'],
+            'wifi_rssi': reported['signal']['rssi'],
+            'mission_sqft': reported['cleanMissionStatus']['sqft'],
+            'last_cmd': reported['lastCommand']['command'],
+            'last_cmd_time': reported['lastCommand']['time'],
+        }
+        try:
+            pretty_state['ready_msg'] = 'Ready: ' + {
+                0  : 'Okay',
+                2  : 'Uneven Ground',
+                15 : 'Low Battery',
+                39 : 'Pending',
+                48 : 'Path Blocked',
+            }[reported['cleanMissionStatus']['notReady']]
+        except KeyError:
+            pretty_state['ready_msg'] = f"Ready: Unknown{reported['cleanMissionStatus']['notReady']}"
+        try:
+            pretty_state['error_msg'] = 'Status: ' + {
+                0  : 'Okay',
+                15 : 'Reboot Required',
+                18 : 'Docking Issue',
+            }[reported['cleanMissionStatus']['error']]
+        except KeyError:
+            pretty_state['error_msg'] = f"Status: Unknown{reported['cleanMissionStatus']['error']}"
+        if reported['cleanMissionStatus']['phase'] == 'charge' and reported['batPct'] == 100:
+            pretty_state['phase'] = 'Roomba Idle'
+        elif reported['cleanMissionStatus']['cycle'] == 'none' and reported['cleanMissionStatus']['phase'] == 'stop':
+            pretty_state['phase'] = 'Roomba Stopped'
+        else:
+            try:
+                pretty_state['phase'] = 'Roomba ' + {
+                    'charge'    : 'Charging',
+                    'run'       : 'Running',
+                    'evac'      : 'Empty',
+                    'stop'      : 'Paused',
+                    'stuck'     : 'Stuck',
+                    'hmUsrDock' : 'Sent Home',
+                    'hmMidMsn'  : 'Mid Dock',
+                    'hmPostMsn' : 'Final Dock' 
+                }[reported['cleanMissionStatus']['phase']]
+            except KeyError:
+                pretty_state['phase'] = 'Roomba ' + reported['cleanMissionStatus']['phase']
+        pretty_state['bin_status'] = {
+            (False, False)  : 'Bin Detached',
+            (False, True)   : 'Bin Detached',
+            (True, False)   : 'Bin Not Full',
+            (True, True)    : 'Bin Full',
+        }[(reported['bin']['present'], reported['bin']['full'])]
+        return pretty_state
+
+    @staticmethod
+    def send_cmd(action):
+        ALL_ACTIONS = ['start', 'stop', 'pause', 'resume', 'dock', 'reset', 'locate']
+        if action in ALL_ACTIONS:
+            response = requests.get(RoombaUtils.ACTION_URL_BASE + action)
+        else:
+            raise ValueError(f'Invalid action={action}. Must be {" ".join(ALL_ACTIONS)}')
+
+def rpc_roomba_get_state(what):
+    logging.info(f'rpc_roomba_get_state(what={what})')
+    if what == 'full':
+        return RoombaUtils.get_full_state()
+    elif what == 'reduced':
+        return RoombaUtils.get_reduced_state()
+    else:
+        raise ValueError(f'Invalid what={what}. Must be full/reduced.')
+
+def rpc_roomba_send_cmd(action):
+    logging.info(f'rpc_roomba_send_cmd(action={action})')
+    RoombaUtils.send_cmd(action)
+
+# ---------------------------------------
+#   Generic
+# ---------------------------------------
+
 def rpc_echo(data):
     logging.info(f'rpc_echo(data={data})')
     return data
 
+def rpc_sleep(duration_s):
+    logging.info(f'rpc_sleep(duration_s={duration_s})')
+    time.sleep(duration_s)
+    return 0
+
+# ---------------------------------------
+#   Main application
+# ---------------------------------------
+
 @Request.application
 def application(request):
     dispatcher["echo"] = rpc_echo
+    dispatcher["sleep"] = rpc_sleep
     dispatcher["email_web_snapshot"] = rpc_email_web_snapshot
     dispatcher["email_text"] = rpc_email_text
+    dispatcher["roomba_get_state"] = rpc_roomba_get_state
+    dispatcher["roomba_send_cmd"] = rpc_roomba_send_cmd
 
     response = JSONRPCResponseManager.handle(
         request.data, dispatcher)
