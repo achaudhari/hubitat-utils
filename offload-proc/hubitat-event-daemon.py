@@ -11,33 +11,18 @@ class Worker:
     def __init__(self, dev, hub_xact_fn):
         self.dev = dev
         self._hub_xact_fn = hub_xact_fn
-        self._next_run_time = time.time() + random.randrange(0, self.dev['poll-interval'])
+        start_offs = random.randrange(0, self.dev['poll-interval'])
+        self._next_run_time = time.time() + start_offs
 
     def work_if_due(self):
         time_now = time.time()
         if time_now > self._next_run_time:
             self.work()
             self._next_run_time = time_now + self.dev['poll-interval']
-            logging.debug(f'{self.dev["name"]}: {self.dev["worker"]}::work() finished in {(time.time()-time_now):03f}s')
+            logging.debug(f'{self.dev["name"]}: {self.dev["worker"]}::work() '
+                          f'finished in {(time.time()-time_now):03f}s')
     def hub_transact(self, *args, **kwargs):
         return self._hub_xact_fn(*args, **kwargs)
-
-class InternetChecker(Worker):
-    def __init__(self, dev, hub_xact_fn):
-        super(InternetChecker, self).__init__(dev, hub_xact_fn)
-        self.is_online = False
-
-    def work(self):
-        try:
-            requests.get('http://1.1.1.1', timeout=1.0)
-            curr_online = True
-        except:
-            curr_online = False
-        if self.is_online != curr_online:
-            self.hub_transact('dev_cmd', dev_id=self.dev['id'],
-                cmd=('arrived' if curr_online else 'departed'))
-            logging.info(f'{self.dev["name"]}: Online status changed to {curr_online}')
-        self.is_online = curr_online
 
 class Pinger(Worker):
     def __init__(self, dev, hub_xact_fn):
@@ -61,8 +46,31 @@ class Pinger(Worker):
         else:
             dispatch_ping = True
         if dispatch_ping:
-            self.ping_proc = subprocess.Popen(
-                ['ping', self.ip_addr, '-i', '0.5', '-c', '4'],
+            self.ping_proc = subprocess.Popen(['ping', self.ip_addr, '-i', '0.5', '-c', '4'],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+class InternetChecker(Worker):
+    def __init__(self, dev, hub_xact_fn):
+        super(InternetChecker, self).__init__(dev, hub_xact_fn)
+        self.is_online = False
+        self.curl_proc = None
+
+    def work(self):
+        dispatch_curl = False
+        if self.curl_proc is not None:
+            if self.curl_proc.poll() is not None:
+                self.curl_proc.communicate()
+                dispatch_curl = True
+                curr_online = (self.curl_proc.returncode == 0)
+                if self.is_online != curr_online:
+                    self.hub_transact('dev_cmd', dev_id=self.dev['id'],
+                        cmd=('arrived' if curr_online else 'departed'))
+                    logging.info(f'{self.dev["name"]}: Online status changed to {curr_online}')
+                self.is_online = curr_online
+        else:
+            dispatch_curl = True
+        if dispatch_curl:
+            self.curl_proc = subprocess.Popen(['curl', '-m', '1', '-I', 'http://www.google.com'],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 class EventDaemon:
