@@ -122,7 +122,9 @@ class RoombaUtils:
     @staticmethod
     def get_reduced_state():
         full = RoombaUtils.get_full_state()
-        reported = full["state"]["reported"]
+        if full['state'] is None:
+            raise IOError(f'Empty state. Roomba might be offline.')
+        reported = full['state']['reported']
         pretty_state = {
             'name': reported['name'],
             'battery': reported['batPct'],
