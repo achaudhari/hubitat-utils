@@ -5,15 +5,8 @@ import time
 import logging
 import argparse
 import random
-import datetime
 import tempfile
 import requests
-
-import email
-from email.mime.base import MIMEBase
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-import mimetypes
 
 from werkzeug.wrappers import Request, Response
 from werkzeug.serving import run_simple
@@ -21,61 +14,13 @@ from jsonrpc import JSONRPCResponseManager, dispatcher
 from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
 
+from common import EmailUtils
+
 def get_host_ip_addr():
     cmd = "hostname -i | awk '{print $1}'"
     return subprocess.check_output(cmd, shell=True).strip().decode('utf-8')
 
 RPC_PORT = 4226
-
-# ---------------------------------------
-#   Email Utilities
-# ---------------------------------------
-class EmailUtils:
-    @staticmethod
-    def _send_msg(msg):
-        with tempfile.NamedTemporaryFile(suffix='.eml', delete=False) as eml_f:
-            eml_f.write(msg.as_bytes())
-            eml_f.flush()
-            subprocess.check_call(f'sendmail -t < {eml_f.name}', shell=True)
-
-    @staticmethod
-    def send_email_text(email_addr, subject, body):
-        msg = MIMEMultipart()
-        msg['To'] = email_addr
-        msg['From'] = f'Automation Bot <{email_addr}>'
-        msg['In-Reply-To'] = msg['From']
-        msg['Subject'] = subject
-        msg['Message-Id'] = f'<{datetime.datetime.now().strftime("%Y%m%d%H%M%S")}.{"%016x" % random.randrange(16 ** 16)}@hauto-offload.local>'
-        body = MIMEText(f'<html><body>{body}</body></html>', _subtype='html')
-        msg.attach(body)
-        EmailUtils._send_msg(msg)
-
-    @staticmethod
-    def send_email_image(email_addr, subject, img_fname):
-        msg = MIMEMultipart()
-        msg['To'] = email_addr
-        msg['From'] = f'Automation Bot <{email_addr}>'
-        msg['In-Reply-To'] = msg['From']
-        msg['Subject'] = subject
-        msg['Message-Id'] = f'<{datetime.datetime.now().strftime("%Y%m%d%H%M%S")}.{"%016x" % random.randrange(16 ** 16)}@hauto-offload.local>'
-        message = '<html><body><img src="cid:img_payload"/></body></html>'
-        body = MIMEText(message, _subtype='html')
-        msg.attach(body)
-        with open(img_fname, 'rb') as fd:
-            mimetype, mimeencoding = mimetypes.guess_type(img_fname)
-            if mimeencoding or (mimetype is None):
-                mimetype = 'application/octet-stream'
-            maintype, subtype = mimetype.split('/')
-            if maintype == 'text':
-                attachment = MIMEText(fd.read(), _subtype=subtype)
-            else:
-                attachment = MIMEBase(maintype, subtype)
-                attachment.set_payload(fd.read())
-                email.encoders.encode_base64(attachment)
-            attachment.add_header('Content-ID', '<img_payload>')
-            attachment.add_header('Content-Disposition', 'inline', filename=img_fname)
-        msg.attach(attachment)
-        EmailUtils._send_msg(msg)
 
 def rpc_email_text(email_addr, subject, email_body):
     logging.info(f'rpc_email_text(email_addr={email_addr}, subject={subject}, '
