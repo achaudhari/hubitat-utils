@@ -73,6 +73,28 @@ class InternetChecker(Worker):
             self.curl_proc = subprocess.Popen(['curl', '-m', '1', '-I', 'http://www.google.com'],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
+class MotionPoll(Worker):
+    def __init__(self, dev, hub_xact_fn):
+        super(MotionPoll, self).__init__(dev, hub_xact_fn)
+        self.curl_proc = None
+
+    def work(self):
+        dispatch_poll = False
+        if self.curl_proc is not None:
+            if self.curl_proc.poll() is not None:
+                self.curl_proc.communicate()
+                dispatch_poll = True
+                if self.curl_proc.returncode > 0:
+                    self.hub_transact('dev_cmd', dev_id=self.dev['id'], cmd='active')
+                    logging.info(f'{self.dev["name"]}: Motion detected')
+        else:
+            dispatch_poll = True
+        if dispatch_poll:
+            self.curl_proc = subprocess.Popen(['python3', '/usr/local/bin/motion-poll.py',
+                '-d', self.dev['worker-args']['dir'], '-e', self.dev['worker-args']['email'],
+                '-n', self.dev["name"]],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
 class EventDaemon:
     def __init__(self, cfg_file, poll_interval):
         CFG_FILE_VER = 1
