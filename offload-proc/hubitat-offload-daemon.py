@@ -146,6 +146,27 @@ def rpc_roomba_send_cmd(action):
     RoombaUtils.send_cmd(action)
 
 # ---------------------------------------
+#   Motion daemon Utilities
+# ---------------------------------------
+class MotionUtils:
+    BASE_URL = 'http://localhost:3724'
+
+    @staticmethod
+    def send_cmd(cam_id, cmd):
+        CMD_MAP = {
+            'restart': 'action/end',
+            'eventstart': 'action/eventstart',
+            'eventend': 'action/eventend',
+            'status': 'detection/connection'
+        }
+        response = requests.get(f'{MotionUtils.BASE_URL}/{cam_id}/{CMD_MAP[cmd]}')
+        return [response.text]
+
+def rpc_motion_send_cmd(cam_id, cmd):
+    logging.info(f'rpc_motion_send_cmd(cam_id={cam_id}, cmd={cmd})')
+    return MotionUtils.send_cmd(cam_id, cmd)
+
+# ---------------------------------------
 #   Generic
 # ---------------------------------------
 
@@ -170,6 +191,7 @@ def application(request):
     dispatcher["email_text"] = rpc_email_text
     dispatcher["roomba_get_state"] = rpc_roomba_get_state
     dispatcher["roomba_send_cmd"] = rpc_roomba_send_cmd
+    dispatcher["motion_send_cmd"] = rpc_motion_send_cmd
 
     response = JSONRPCResponseManager.handle(
         request.data, dispatcher)
