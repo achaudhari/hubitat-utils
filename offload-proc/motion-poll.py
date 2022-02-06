@@ -38,17 +38,23 @@ def poll(base_dir, cam_name, email_addr, verbose):
             if verbose:
                 print(f'[DEBUG] Found new summary image: {jpeg_f}')
             mp4_pat = f'*-*-e{match.group(3)}.mp4'
-            mp4_f = glob.glob(os.path.join(base_dir, mp4_pat))
-            if mp4_f:
+            mp4_files = glob.glob(os.path.join(base_dir, mp4_pat))
+            if mp4_files:
+                mp4_files.sort()
                 if verbose:
-                    print(f'[DEBUG] Matched a video: {mp4_f}')
-                mp4_f = mp4_f[0]
+                    print(f'[DEBUG] Matched videos: {mp4_files}')
                 subject = f'Your {cam_name} camera detected motion'
-                email_html = '<html><body><img src="cid:motion_snapshot"/></body></html>'
-                inline_images = {'motion_snapshot': jpeg_f}
-                attachments = [mp4_f]
+                email_html = (f'<body><img src="cid:motion_snapshot"/>'
+                              f'<p>Captured the following videos (first and last attached):<br>'
+                              f'{"<br>".join(mp4_files)}'
+                              f'</p></body>')
+                inline_imgs = {'motion_snapshot': jpeg_f}
+                if len(mp4_files) > 1:
+                    attachments = [mp4_files[0], mp4_files[-1]]
+                else:
+                    attachments = mp4_files
                 EmailUtils.send_email_html(
-                    email_addr, subject, email_html, inline_images, attachments)
+                    email_addr, subject, email_html, inline_imgs, attachments)
                 if verbose:
                     print(f'[DEBUG] Sent email to {email_addr}')
                 processed += 1

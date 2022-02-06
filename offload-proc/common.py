@@ -76,7 +76,7 @@ class EmailUtils:
         msg['In-Reply-To'] = msg['From']
         msg['Subject'] = subject
         msg['Message-Id'] = EmailUtils._gen_msg_id()
-        body = MIMEText(body_html, _subtype='html')
+        body = MIMEText(f'<html>{body_html}</html>', _subtype='html')
         msg.attach(body)
         for cid, img_fname in inline_images.items():
             with open(img_fname, 'rb') as fd:
