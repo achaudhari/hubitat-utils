@@ -70,7 +70,7 @@ class InternetChecker(Worker):
         else:
             dispatch_curl = True
         if dispatch_curl:
-            self.curl_proc = subprocess.Popen(['curl', '-m', '1', '-I', 'http://www.google.com'],
+            self.curl_proc = subprocess.Popen(['curl', '-m', '5', '-I', 'http://www.google.com'],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 class MotionPoll(Worker):
