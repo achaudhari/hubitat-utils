@@ -141,7 +141,7 @@ class EventDaemon:
                 return
 
 def main():
-    parser = argparse.ArgumentParser(description='Hubitat Offload Daemon')
+    parser = argparse.ArgumentParser(description='Hubitat Event Notifier Daemon')
     parser.add_argument('--cfg-json', type=str, default=None, help='Path to JSON config file')
     parser.add_argument('--poll-interval', type=float, default=10.0, help='Polling interval')
     parser.add_argument('--verbose', action='store_true', help='Verbose output')
