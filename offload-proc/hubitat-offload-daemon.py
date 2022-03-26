@@ -23,6 +23,7 @@ def get_host_ip_addr():
 RPC_PORT = 4226
 
 def rpc_email_text(email_addr, subject, email_body):
+    email_body = email_body.replace('\n', '<br>').replace('\t', '&emsp;')
     logging.info(f'rpc_email_text(email_addr={email_addr}, subject={subject}, '
         f'email_body={email_body})')
     EmailUtils.send_email_text(email_addr, subject, email_body)
