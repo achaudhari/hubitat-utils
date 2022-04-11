@@ -18,10 +18,10 @@ if [[ "$1" == "cookie" ]]; then
     curl -k -c $cookiefile -d username=$he_login -d password=$he_passwd https://$he_ipaddr/login
     echo "Saved $cookiefile"
 elif [[ "$1" == "backup" ]]; then
-    find $backupdir/hub_backup_*.lzf -mtime +60 -exec rm {} \;
+    echo "INFO: Downloading backup from Hubitat hub"
     backupfile=$backupdir/hub_backup_$(date +%Y-%m-%d_%H%M).lzf
     curl -k -sb $cookiefile https://$he_ipaddr/hub/backupDB?fileName=latest -o $backupfile
-    echo "Saved $backupfile"
+    echo "INFO: Saved $backupfile"
 elif [[ "$1" == "" ]]; then
     echo "ERROR: Usage $0 <action> <save path>"
     exit 1
