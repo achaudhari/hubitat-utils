@@ -11,16 +11,19 @@ import requests
 from werkzeug.wrappers import Request, Response
 from werkzeug.serving import run_simple
 from jsonrpc import JSONRPCResponseManager, dispatcher
-from selenium import webdriver
-from selenium.webdriver.firefox.options import Options
+from PyQt5.QtWidgets import QApplication
+from PyQt5.QtCore import Qt, QUrl, QTimer
+from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEngineSettings
 
 from common import EmailUtils
+
+SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
+
+RPC_PORT = 4226
 
 def get_host_ip_addr():
     cmd = "hostname -i | awk '{print $1}'"
     return subprocess.check_output(cmd, shell=True).strip().decode('utf-8')
-
-RPC_PORT = 4226
 
 def rpc_email_text(email_addr, subject, email_body):
     email_body = email_body.replace('\n', '<br>').replace('\t', '&emsp;')
@@ -29,28 +32,21 @@ def rpc_email_text(email_addr, subject, email_body):
     EmailUtils.send_email_text(email_addr, subject, email_body)
     logging.info('rpc_email_text: Finished successfully')
 
-def rpc_email_web_snapshot(email_addr, subject, page_url, page_wd, page_ht, load_delay):
+def rpc_email_web_snapshot(email_addr, subject, page_url, load_delay):
     logging.info(f'rpc_email_web_snapshot(email_addr={email_addr}, subject={subject}, '
-        f'page_url={page_url}, page_wd={page_wd}, page_ht={page_ht}, load_delay={load_delay})')
-    # Open headless firefox and resize window
-    logging.info('rpc_email_web_snapshot: Starting browser...')
-    options = Options()
-    options.headless = True
-    driver = webdriver.Firefox(options=options)
-    driver.set_window_position(0, 0)
-    driver.set_window_size(page_wd, page_ht)
+        f'page_url={page_url}, load_delay={load_delay})')
+
     # Load URL and save screenshot
     logging.info('rpc_email_web_snapshot: Loading page and saving screenshot...')
-    driver.get(page_url)
-    time.sleep(load_delay)
     dashboard_img_path = tempfile.mktemp(suffix='.png')
-    driver.save_screenshot(dashboard_img_path)
+    script = os.path.join(SCRIPT_DIR, 'web-screenshot.sh')
+    os.system(f'bash {script} {page_url} {int(load_delay * 1e3)} {dashboard_img_path}')
+
     # Create email and send
     logging.info('rpc_email_web_snapshot: Sending email...')
     EmailUtils.send_email_image(email_addr, subject, dashboard_img_path)
     # Cleanup
     os.unlink(dashboard_img_path)
-    driver.quit()
     logging.info('rpc_email_web_snapshot: Finished successfully')
 
 # ---------------------------------------
@@ -194,21 +190,21 @@ def application(request):
     dispatcher["roomba_send_cmd"] = rpc_roomba_send_cmd
     dispatcher["motion_send_cmd"] = rpc_motion_send_cmd
 
-    response = JSONRPCResponseManager.handle(
-        request.data, dispatcher)
+    response = JSONRPCResponseManager.handle(request.data, dispatcher)
     return Response(response.json, mimetype='application/json')
 
 def main():
     parser = argparse.ArgumentParser(description='Hubitat Offload Daemon')
     parser.add_argument('--rpc-addr', type=str, default=get_host_ip_addr(), help='IP address to bing server to')
     parser.add_argument('--rpc-port', type=int, default=RPC_PORT, help='TCP port to listen on')
+    parser.add_argument('--processes', type=int, default=3, help='Max number of processes')
     parser.add_argument('--verbose', action='store_true', help='Verbose output')
     args = parser.parse_args()
 
     log_level = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(level=log_level)
 
-    run_simple(args.rpc_addr, args.rpc_port, application)
+    run_simple(args.rpc_addr, args.rpc_port, application, processes=args.processes)
 
 if __name__ == '__main__':
     main()
