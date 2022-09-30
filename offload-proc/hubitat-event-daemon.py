@@ -46,7 +46,7 @@ class Pinger(Worker):
         else:
             dispatch_ping = True
         if dispatch_ping:
-            self.ping_proc = subprocess.Popen(['ping', self.ip_addr, '-i', '0.5', '-c', '4'],
+            self.ping_proc = subprocess.Popen(['ping', self.ip_addr, '-i', '0.5', '-c', '5'],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 class InternetChecker(Worker):
