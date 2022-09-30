@@ -18,5 +18,5 @@ mkdir -p ${BACKUP_LOC}/www
 tar -czf ${BACKUP_LOC}/www/$backupfile www
 ${SCRIPT_DIR}/purge-old-files.sh -f ${BACKUP_LOC}/www '*.tar.gz' $MAX_DAYS
 
-${SCRIPT_DIR}/download-hubitat-backup.sh backup ${BACKUP_LOC}/hubitat
+${SCRIPT_DIR}/hubitat-admin-ctrl.sh backup ${BACKUP_LOC}/hubitat
 ${SCRIPT_DIR}/purge-old-files.sh -f ${BACKUP_LOC}/hubitat 'hub_backup_*.lzf' $MAX_DAYS
