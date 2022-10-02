@@ -18,7 +18,7 @@ from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEngineSettings
 from common import EmailUtils
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
-
+CFG_DIR = '/home/admin/cfg'
 RPC_PORT = 4226
 
 def get_host_ip_addr():
@@ -176,6 +176,42 @@ def rpc_sleep(duration_s):
     time.sleep(duration_s)
     return 0
 
+def hub_authenticate(cookie):
+    with open(os.path.join(CFG_DIR, 'hubitat.secret'), 'r') as sec_f:
+        shared_sec = sec_f.readline().strip()
+    # Encrypted using $ cat /sys/class/net/eth0/address | cut -c -18 | openssl enc -e -des3 -base64 -pass pass:${shared_sec} -pbkdf2
+    try:
+        resp_rem = subprocess.check_output(
+            f'echo "{cookie}" | openssl enc -d -des3 -base64 -pass pass:{shared_sec} -pbkdf2',
+            shell=True).strip().decode('utf-8')
+        resp_lcl = subprocess.check_output('cat /sys/class/net/eth0/address',
+            shell=True).strip().decode('utf-8')
+    except:
+        raise PermissionError('Secret validation failed. Permission denied.')
+    if resp_rem != resp_lcl:
+        raise PermissionError('Secret validation failed. Permission denied.')
+
+def rpc_reboot_sys(cookie):
+    logging.info(f'rpc_reboot_sys(cookie={cookie})')
+    hub_authenticate(cookie)
+    logging.info('rpc_reboot_sys: Permission granted. Rebooting system...')
+    subprocess.Popen(['sleep 3; sudo /sbin/reboot'], shell=True) # Nonblocking
+    return cookie
+
+def rpc_shutdown_sys(cookie):
+    logging.info(f'rpc_shutdown_sys(cookie={cookie})')
+    hub_authenticate(cookie)
+    logging.info('rpc_shutdown_sys: Permission granted. Shutting system down...')
+    subprocess.Popen(['sleep 3; sudo /sbin/shutdown -h now'], shell=True) # Nonblocking
+    return cookie
+
+def rpc_hub_safe_shutdown(cookie):
+    logging.info(f'rpc_hub_safe_shutdown(cookie={cookie})')
+    hub_authenticate(cookie)
+    logging.info('rpc_hub_safe_shutdown: Permission granted. Shutting down hub...')
+    os.system(f'bash {os.path.join(SCRIPT_DIR, "hubitat-admin-ctrl.sh")} shutdown')
+    return cookie
+
 # ---------------------------------------
 #   Main application
 # ---------------------------------------
@@ -189,6 +225,9 @@ def application(request):
     dispatcher["roomba_get_state"] = rpc_roomba_get_state
     dispatcher["roomba_send_cmd"] = rpc_roomba_send_cmd
     dispatcher["motion_send_cmd"] = rpc_motion_send_cmd
+    dispatcher["reboot"] = rpc_reboot_sys
+    dispatcher["shutdown"] = rpc_shutdown_sys
+    dispatcher["hub_safe_shutdown"] = rpc_hub_safe_shutdown
 
     response = JSONRPCResponseManager.handle(request.data, dispatcher)
     return Response(response.json, mimetype='application/json')
