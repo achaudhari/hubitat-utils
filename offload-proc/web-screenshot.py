@@ -27,6 +27,7 @@ class Screenshot(QWebEngineView):
 
     def take_screenshot(self):
         self.grab().save(self.out_file, b'PNG')
+        self.page().profile().clearHttpCache()
         self.app.quit()
 
 s = Screenshot(sys.argv[1], int(sys.argv[2]), sys.argv[3])
