@@ -28,7 +28,7 @@ class Pinger(Worker):
     def __init__(self, dev, hub_xact_fn):
         super(Pinger, self).__init__(dev, hub_xact_fn)
         self.ip_addr = dev['worker-args']['addr']
-        self.is_online = False
+        self.is_online = None
         self.ping_proc = None
 
     def work(self):
@@ -52,16 +52,16 @@ class Pinger(Worker):
 class InternetChecker(Worker):
     def __init__(self, dev, hub_xact_fn):
         super(InternetChecker, self).__init__(dev, hub_xact_fn)
-        self.is_online = False
+        self.is_online = None
         self.curl_proc = None
 
     def work(self):
         dispatch_curl = False
         if self.curl_proc is not None:
             if self.curl_proc.poll() is not None:
-                self.curl_proc.communicate()
+                pout = self.curl_proc.communicate()[0].decode('utf-8')
                 dispatch_curl = True
-                curr_online = (self.curl_proc.returncode == 0)
+                curr_online = (self.curl_proc.returncode == 0 and 'OK' in pout.split('\n')[0])
                 if self.is_online != curr_online:
                     self.hub_transact('dev_cmd', dev_id=self.dev['id'],
                         cmd=('arrived' if curr_online else 'departed'))
@@ -70,7 +70,7 @@ class InternetChecker(Worker):
         else:
             dispatch_curl = True
         if dispatch_curl:
-            self.curl_proc = subprocess.Popen(['curl', '-m', '5', '-I', 'http://www.google.com'],
+            self.curl_proc = subprocess.Popen(['curl', '-m', '5', '-I', 'http://www.example.com'],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 class MotionPoll(Worker):
