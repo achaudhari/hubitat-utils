@@ -8,8 +8,8 @@ import random
 import tempfile
 import requests
 
+from waitress import serve
 from werkzeug.wrappers import Request, Response
-from werkzeug.serving import run_simple
 from jsonrpc import JSONRPCResponseManager, dispatcher
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import Qt, QUrl, QTimer
@@ -40,7 +40,7 @@ def rpc_email_web_snapshot(email_addr, subject, page_url, load_delay):
     logging.info('rpc_email_web_snapshot: Loading page and saving screenshot...')
     dashboard_img_path = tempfile.mktemp(suffix='.png')
     script = os.path.join(SCRIPT_DIR, 'web-screenshot.sh')
-    os.system(f'bash {script} {page_url} {int(load_delay * 1e3)} {dashboard_img_path}')
+    os.system(f'bash {script} "{page_url}" {int(load_delay * 1e3)} {dashboard_img_path}')
 
     # Create email and send
     logging.info('rpc_email_web_snapshot: Sending email...')
@@ -243,7 +243,7 @@ def main():
     log_level = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(level=log_level)
 
-    run_simple(args.rpc_addr, args.rpc_port, application, processes=args.processes)
+    serve(application, host=args.rpc_addr, port=args.rpc_port, threads=args.processes)
 
 if __name__ == '__main__':
     main()
