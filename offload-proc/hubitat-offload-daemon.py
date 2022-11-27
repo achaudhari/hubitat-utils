@@ -11,9 +11,6 @@ import requests
 from waitress import serve
 from werkzeug.wrappers import Request, Response
 from jsonrpc import JSONRPCResponseManager, dispatcher
-from PyQt5.QtWidgets import QApplication
-from PyQt5.QtCore import Qt, QUrl, QTimer
-from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEngineSettings
 
 from common import EmailUtils
 
@@ -161,7 +158,11 @@ class MotionUtils:
 
 def rpc_motion_send_cmd(cam_id, cmd):
     logging.info(f'rpc_motion_send_cmd(cam_id={cam_id}, cmd={cmd})')
-    return MotionUtils.send_cmd(cam_id, cmd)
+    try:
+        response = MotionUtils.send_cmd(cam_id, cmd)
+    except Exception as e:
+        raise RuntimeError(str(e))
+    return response
 
 # ---------------------------------------
 #   Generic
