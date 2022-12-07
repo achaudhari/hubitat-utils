@@ -11,7 +11,8 @@ import requests
 from waitress import serve
 from werkzeug.wrappers import Request, Response
 from jsonrpc import JSONRPCResponseManager, dispatcher
-
+from selenium import webdriver
+from selenium.webdriver.firefox.options import Options
 from common import EmailUtils
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -30,20 +31,36 @@ def rpc_email_text(email_addr, subject, email_body):
     logging.info('rpc_email_text: Finished successfully')
 
 def rpc_email_web_snapshot(email_addr, subject, page_url, load_delay):
+    page_wd = 900
+    page_ht = 3000
     logging.info(f'rpc_email_web_snapshot(email_addr={email_addr}, subject={subject}, '
-        f'page_url={page_url}, load_delay={load_delay})')
-
+        f'page_url={page_url}, page_wd={page_wd}, page_ht={page_ht}, load_delay={load_delay})')
+    # Open headless firefox and resize window
+    logging.info('rpc_email_web_snapshot: Starting browser...')
+    options = Options()
+    options.headless = True
+    driver = webdriver.Firefox(options=options)
+    driver.set_window_position(0, 0)
+    driver.set_window_size(page_wd, page_ht)
     # Load URL and save screenshot
     logging.info('rpc_email_web_snapshot: Loading page and saving screenshot...')
+    driver.get(page_url)
+    time.sleep(load_delay)
+    # if page_wd == 0:
+    #     page_wd = int(driver.execute_script("return document.body.clientWidth;"))
+    #     # page_wd = int(driver.execute_script("return document.body.scrollWidth;"))
+    # if page_ht == 0:
+    #     # driver.execute_script("window.scrollTo(0, document.body.scrollHeight)")
+    #     page_ht = int(driver.execute_script("return document.body.clientHeight;"))
+    #     # page_ht = int(driver.execute_script("return document.body.scrollHeight;"))
     dashboard_img_path = tempfile.mktemp(suffix='.png')
-    script = os.path.join(SCRIPT_DIR, 'web-screenshot.sh')
-    os.system(f'bash {script} "{page_url}" {int(load_delay * 1e3)} {dashboard_img_path}')
-
+    driver.save_screenshot(dashboard_img_path)
     # Create email and send
     logging.info('rpc_email_web_snapshot: Sending email...')
     EmailUtils.send_email_image(email_addr, subject, dashboard_img_path)
     # Cleanup
     os.unlink(dashboard_img_path)
+    driver.quit()
     logging.info('rpc_email_web_snapshot: Finished successfully')
 
 # ---------------------------------------
@@ -230,7 +247,8 @@ def application(request):
     dispatcher["shutdown"] = rpc_shutdown_sys
     dispatcher["hub_safe_shutdown"] = rpc_hub_safe_shutdown
 
-    response = JSONRPCResponseManager.handle(request.data, dispatcher)
+    response = JSONRPCResponseManager.handle(
+        request.data, dispatcher)
     return Response(response.json, mimetype='application/json')
 
 def main():
