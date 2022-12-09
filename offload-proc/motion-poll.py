@@ -44,10 +44,10 @@ def poll(base_dir, cam_name, email_addr, verbose):
                 if verbose:
                     print(f'[DEBUG] Matched videos: {mp4_files}')
                 subject = f'Your {cam_name} camera detected motion'
-                email_html = (f'<body><img src="cid:motion_snapshot"/>'
+                email_html = (f'<html><body><img src="cid:motion_snapshot"/>'
                               f'<p>Captured the following videos (first and last attached):<br>'
                               f'{"<br>".join(mp4_files)}'
-                              f'</p></body>')
+                              f'</p></body></html>')
                 inline_imgs = {'motion_snapshot': jpeg_f}
                 if len(mp4_files) > 1:
                     attachments = [mp4_files[0], mp4_files[-1]]
