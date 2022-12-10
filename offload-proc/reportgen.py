@@ -31,12 +31,15 @@ class HistoryReportGen:
 
     def send_email(self, t_strt, t_stop, email_addr):
         logging.info('HistoryReportGen: Pulling data from influxdb...')
+        event_log = []
         door_tbl = [('Door', 'Opens')]
         for d in self.senscfg['doors']:
             meas, dev = meas_dev(d['status'])
             sens = SensorHist(self.dbcli, meas, dev, t_strt, t_stop)
-            opens = sum([abs(t) for _, t in sens.calc_transitions() if t < 0])
+            opens = len([ts for ts, val in sens.calc_transitions() if val < 0])
             door_tbl.append((d['name'], str(opens)))
+            for ts, val in sens.calc_transitions():
+                event_log.append((ts, f'{d["name"]} {("OPENED" if val < 0 else "CLOSED")}'))
         motion_tbl = [('Zone', 'Activity Factor')]
         for d in self.senscfg['motion-zones']:
             meas, dev = meas_dev(d['status'])
@@ -54,11 +57,16 @@ class HistoryReportGen:
                         stats = sens.calc_stats()
                         val = f'{int(stats["mean"]*100):d}%' if 'mean' in stats else '0%'
                     else:
-                        val = str(sum([abs(t) for _, t in sens.calc_transitions() if t > 0]))
+                        events = [ts for ts, val in sens.calc_transitions() if val > 0]
+                        val = str(len(events))
+                        if m == 'person':
+                            for ts in events:
+                                event_log.append((ts, f'{d["name"]} PERSON'))
                 else:
                     val = ''
                 vals.append(val)
             camera_tbl.append((d['name'], *tuple(vals)))
+        event_log.sort()
 
         logging.info('HistoryReportGen: Starting browser...')
         webshot = WebScreenshotFirefox()
@@ -68,42 +76,61 @@ class HistoryReportGen:
             'environmental_dashboard': tempfile.mktemp(suffix='.png'),
         }
         webshot.take(self.grafana_link('timeline', t_strt, t_stop),
-            imgs['timeline_dashboard'], 5.0, 900, 1400)
+            imgs['timeline_dashboard'], 5.0, 1080, 1500)
         webshot.take(self.grafana_link('environmental', t_strt, t_stop),
-            imgs['environmental_dashboard'], 3.0, 900, 1020)
+            imgs['environmental_dashboard'], 3.0, 1080, 1050)
 
         logging.info('HistoryReportGen: Generating HTML...')
         title = 'Sensor History Report'
         doc = dominate.document(title=title, doctype=None)
         with doc:
-            h3(title)
-            p(f'{t_strt.strftime("%Y-%m-%d %l:%M:%S %p")} - {t_stop.strftime("%Y-%m-%d %l:%M:%S %p")}')
-            with h4():
-                u('Timeline Dashboard')
+            style("""\
+                    table, th, td {
+                        border: 1px solid;
+                        border-collapse: collapse;
+                    }
+                    th, td {
+                        padding-top: 3px; padding-bottom: 3px;
+                        padding-left: 5px; padding-right: 5px;
+                    }
+                  """)
+            h2(title)
+            p(f'{t_strt.strftime("%Y-%m-%d %l:%M:%S %p")} - {t_stop.strftime("%Y-%m-%d %l:%M:%S %p")}',
+              style="font-weight: bold; color:blue")
+            with h3():
+                u('Activity Timeline')
             img(src="cid:timeline_dashboard")
-            with h4():
-                u('Environmental Dashboard')
+            with h3():
+                u('Environmental')
             img(src="cid:environmental_dashboard")
             tbl_def = [('Door Summary', door_tbl), 
                        ('Motion Summary', motion_tbl), ('Camera Summary', camera_tbl)]
             for tname, tdata in tbl_def:
-                with h4():
+                with h3():
                     u(tname)
-                with table(border=1).add(tbody()):
+                with table().add(tbody()):
                     for nrow, trow in enumerate(tdata):
                         with tr():
                             for tcell in trow:
-                                if nrow == 0:
-                                    th(tcell, style='padding:5px')
-                                else:
-                                    td(tcell, style='padding:3px')
+                                td(tcell, style=('font-weight: bold;' if nrow == 0 else ''))
+            with h3():
+                u('Event Log')
+            with table().add(tbody()):
+                with tr():
+                    td('Time', style='font-weight: bold;')
+                    td('Event', style='font-weight: bold;')
+                for trow in event_log:
+                    with tr():
+                        ts, evnt = trow
+                        td(ts.strftime("%Y-%m-%d %l:%M:%S %p"))
+                        td(evnt)
 
         logging.info('HistoryReportGen: Sending email...')
         subject = f'INFO: Sensor History ({t_stop.strftime("%Y-%m-%d")})'
         EmailUtils.send_email_html(email_addr, subject, str(doc), imgs)
         os.unlink(imgs['timeline_dashboard'])
         os.unlink(imgs['environmental_dashboard'])
-        logging.info('HistoryReportGen: Done')
+        logging.info('HistoryReportGen: Email sent')
 
 
 def main():

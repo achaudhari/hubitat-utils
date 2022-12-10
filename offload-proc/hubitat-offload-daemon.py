@@ -2,6 +2,7 @@
 import os, sys
 import subprocess
 import time
+import datetime
 import logging
 import argparse
 import random
@@ -13,6 +14,8 @@ from werkzeug.wrappers import Request, Response
 from jsonrpc import JSONRPCResponseManager, dispatcher
 from webshot_ffox import WebScreenshotFirefox
 from common import EmailUtils
+from reportgen import HistoryReportGen
+
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 CFG_DIR = '/home/admin/cfg'
@@ -44,6 +47,14 @@ def rpc_email_web_snapshot(email_addr, subject, page_url, load_delay):
     EmailUtils.send_email_image(email_addr, subject, dashboard_img_path)
     os.unlink(dashboard_img_path)
     logging.info('rpc_email_web_snapshot: Finished successfully')
+
+def rpc_email_history_report(email_addr, duration_hr):
+    logging.info(f'rpc_email_history_report(email_addr={email_addr}, duration_hr={duration_hr})')
+    t_stop = datetime.datetime.now()
+    t_strt = t_stop - datetime.timedelta(hours=duration_hr)
+    rgen = HistoryReportGen(os.path.join(CFG_DIR, 'history-report.json'),
+        os.path.join(CFG_DIR, 'influxdb.cred'))
+    rgen.send_email(t_strt, t_stop, email_addr)
 
 # ---------------------------------------
 #   Roomba Utilities
@@ -221,6 +232,7 @@ def application(request):
     dispatcher["echo"] = rpc_echo
     dispatcher["sleep"] = rpc_sleep
     dispatcher["email_web_snapshot"] = rpc_email_web_snapshot
+    dispatcher["email_history_report"] = rpc_email_history_report
     dispatcher["email_text"] = rpc_email_text
     dispatcher["roomba_get_state"] = rpc_roomba_get_state
     dispatcher["roomba_send_cmd"] = rpc_roomba_send_cmd

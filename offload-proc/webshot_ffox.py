@@ -17,11 +17,13 @@ class WebScreenshotFirefox:
 
     def take(self, url, img_path, delay_s, width, height = None):
         self.driver.get(url)
-        time.sleep(delay_s)
+        time.sleep(1.0) # Load delay
         if height is None:
             height = int(self.driver.execute_script("return document.body.clientHeight;"))
-        # self.driver.set_window_position(0, 0)
+        self.driver.set_window_position(0, 0)
         self.driver.set_window_size(width, height)
+        self.driver.refresh()
+        time.sleep(delay_s)
         self.driver.save_screenshot(img_path)
         # if page_wd == 0:
         #     page_wd = int(driver.execute_script("return document.body.clientWidth;"))
