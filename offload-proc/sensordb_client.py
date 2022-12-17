@@ -52,8 +52,8 @@ class SensorDbClient:
     def query_raw_sql(self, query):
         return self.client.query(query).get_points()
 
-    def query(self, measurement, 
-              t_strt = None, t_stop = datetime.now(), reverse = False, device = '.*'):
+    def query(self, measurement, t_strt = None, t_stop = datetime.now(),
+              reverse = False, device = '.*', device_regex = True):
         t_strt_unix = int(time.mktime(t_strt.timetuple()) * 1e9) \
             if t_strt is not None else 0
         t_stop_unix = int(time.mktime(t_stop.timetuple()) * 1e9)
@@ -63,7 +63,11 @@ class SensorDbClient:
         results = []
         for rrow in self.query_raw_sql(sql):
             frow = {}
-            if re.search(device, rrow[DEVICE_ATTR]):
+            if device_regex:
+                dev_match = (re.search(device, rrow[DEVICE_ATTR]) is not None)
+            else:
+                dev_match = (device == rrow[DEVICE_ATTR])
+            if dev_match:
                 for key in rrow:
                     if key in IGNORE_COLS:
                         continue
@@ -88,8 +92,8 @@ class SensorHist:
         self.dev_name = dev_name
         self.values = []
         self.val_map = {}
-        data = self.db_client.query(
-            meas, t_strt=t_strt, t_stop=t_stop, reverse=False, device=dev_name)
+        data = self.db_client.query(meas, t_strt=t_strt, t_stop=t_stop,
+            reverse=False, device=dev_name, device_regex=False)
         value_attr = None
         for rec in data:
             if rec[DEVICE_ATTR].strip() != self.dev_name.strip():
@@ -143,7 +147,7 @@ def main():
     args = parser.parse_args()
 
     client = SensorDbClient(args.creds)
-    query = {"reverse": args.rev, "device": args.dev}
+    query = {"reverse": args.rev, "device": args.dev, "device_regex": True}
     query["t_strt"] = datetime.strptime(args.start, "%Y-%m-%d %H:%M:%S") if args.start else None
     query["t_stop"] = datetime.strptime(args.stop, "%Y-%m-%d %H:%M:%S") if args.stop else datetime.now()
 
