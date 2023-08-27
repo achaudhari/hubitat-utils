@@ -2,13 +2,15 @@
 import time
 from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
+from selenium.webdriver.firefox.service import Service
 
 class WebScreenshotFirefox:
     def __init__(self):
         self.driver = None
         options = Options()
         options.headless = True
-        self.driver = webdriver.Firefox(options=options)
+        geckodriver_path = Service('/usr/bin/geckodriver')
+        self.driver = webdriver.Firefox(service=geckodriver_path, options=options)
 
     def __del__(self):
         if self.driver:
