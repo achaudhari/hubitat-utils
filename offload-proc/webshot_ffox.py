@@ -1,14 +1,17 @@
 
 import time
 from selenium import webdriver
-from selenium.webdriver.firefox.options import Options
+from selenium.webdriver import FirefoxOptions
+# from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.firefox.service import Service
 
 class WebScreenshotFirefox:
     def __init__(self):
         self.driver = None
-        options = Options()
-        options.headless = True
+        options = FirefoxOptions()
+        options.add_argument("--headless")
+        # options = Options()
+        # options.headless = True
         geckodriver_path = Service('/usr/bin/geckodriver')
         self.driver = webdriver.Firefox(service=geckodriver_path, options=options)
 
@@ -24,7 +27,7 @@ class WebScreenshotFirefox:
             height = int(self.driver.execute_script("return document.body.clientHeight;"))
         self.driver.set_window_position(0, 0)
         self.driver.set_window_size(width, height)
-        self.driver.refresh()
+        # self.driver.refresh()
         time.sleep(delay_s)
         self.driver.save_screenshot(img_path)
         # if page_wd == 0:
