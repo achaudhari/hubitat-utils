@@ -5,6 +5,7 @@ import datetime
 import subprocess
 import random
 import tempfile
+import hashlib
 
 import email
 from email.mime.base import MIMEBase
@@ -30,13 +31,22 @@ class EmailUtils:
         return f'<{dt}.{"%016x" % random.randrange(16 ** 16)}@hauto-offload.local>'
 
     @staticmethod
-    def send_email_text(email_addr, subject, body):
+    def unique_footer():
+        rand_md5 = hashlib.md5(datetime.datetime.utcnow().isoformat().encode()).hexdigest()
+        return f'<span style="max-height:0;max-width:0;display:inline-block;' \
+               f'mso-font-width:0%;mso-style-textfill-type:none;white-space:nowrap;' \
+               f'font-size:1px;color:rgba(0,0,0,0);text-indent:9px;">{rand_md5}</span>'
+
+    @staticmethod
+    def send_email_text(email_addr, subject, body, uniquify = True):
         msg = MIMEMultipart()
         msg['To'] = email_addr
         msg['From'] = f'Automation Bot <{email_addr}>'
         msg['In-Reply-To'] = msg['From']
         msg['Subject'] = subject
         msg['Message-Id'] = EmailUtils._gen_msg_id()
+        if uniquify:
+            body += EmailUtils.unique_footer()
         body = MIMEText(f'<html><body>{body}</body></html>', _subtype='html')
         msg.attach(body)
         EmailUtils._send_msg(msg)
