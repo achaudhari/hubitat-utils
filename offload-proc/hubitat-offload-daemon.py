@@ -223,6 +223,52 @@ def rpc_hub_safe_shutdown(cookie):
     os.system(f'bash {os.path.join(SCRIPT_DIR, "hubitat-admin-ctrl.sh")} shutdown')
     return cookie
 
+SWA_CHECKIN_SCRIPT = '/home/autouser/src/third-party/swa-checkin/southwest.py'
+SWA_CHECKIN_TARGET = 'autouser@hauto-x86-n0.local'
+
+def rpc_swa_checkin_schedule(confirmation_arg, fname_arg, lname_arg):
+    logging.info(f'rpc_swa_checkin(confirmation={confirmation_arg}, '
+        f'fname={fname_arg}, lname={lname_arg})')
+    if confirmation_arg.strip():
+        checkins = [(confirmation_arg, fname_arg, lname_arg)]
+    else:
+        with open(os.path.join(CFG_DIR, 'swa-checkin-cache.csv'), 'r') as csv_f:
+            checkins = [tuple(l.strip().split(',')) for l in csv_f.readlines()]
+
+    delay = 0
+    for confirmation, fname, lname in checkins:
+        cmd = f'ssh {SWA_CHECKIN_TARGET} "sleep {delay}; python3 {SWA_CHECKIN_SCRIPT} {confirmation} {fname} {lname} &"'
+        subprocess.Popen([cmd], shell=True) # Nonblocking
+        logging.info(f'rpc_swa_checkin: Dispatched {cmd}')
+        delay += 8
+
+def rpc_swa_checkin_ls(email_addr):
+    logging.info(f'rpc_swa_checkin_ls()')
+    cmd = f'ssh {SWA_CHECKIN_TARGET} "pgrep -af {SWA_CHECKIN_SCRIPT}"'
+    reservations = set()
+    try:
+        for line in subprocess.check_output([cmd], shell=True, encoding='UTF-8').split('\n'):
+            toks = line.split(' ')
+            if len(toks) == 6:
+                reservations.add(tuple(toks[3:6]))
+        email_lines = ['INFO: Checkins currently scheduled'] + \
+                      [f'* {c}: {f} {l}' for c,f,l in reservations]
+        cache_lines = [f'{c},{f},{l}' for c,f,l in reservations]
+    except subprocess.CalledProcessError:
+        email_lines = ['INFO: No checkins scheduled at this time']
+        cache_lines = []
+    with open(os.path.join(CFG_DIR, 'swa-checkin-cache.csv'), 'w') as csv_f:
+        for l in cache_lines:
+            csv_f.write(f'{l}\n')
+    email_body = f'<body>{"<br>".join(email_lines)}</body>{EmailUtils.unique_footer()}'
+    EmailUtils.send_email_html(email_addr,
+        'Southwest Check-in Status', f'<html>{email_body}</html>')
+
+def rpc_swa_checkin_killall():
+    logging.info(f'rpc_swa_checkin_killall()')
+    cmd = f'ssh {SWA_CHECKIN_TARGET} "pkill -f {SWA_CHECKIN_SCRIPT}"'
+    subprocess.Popen([cmd], shell=True)
+
 # ---------------------------------------
 #   Main application
 # ---------------------------------------
@@ -240,6 +286,9 @@ def application(request):
     dispatcher["reboot"] = rpc_reboot_sys
     dispatcher["shutdown"] = rpc_shutdown_sys
     dispatcher["hub_safe_shutdown"] = rpc_hub_safe_shutdown
+    dispatcher["swa_checkin_schedule"] = rpc_swa_checkin_schedule
+    dispatcher["swa_checkin_ls"] = rpc_swa_checkin_ls
+    dispatcher["swa_checkin_killall"] = rpc_swa_checkin_killall
 
     response = JSONRPCResponseManager.handle(
         request.data, dispatcher)
