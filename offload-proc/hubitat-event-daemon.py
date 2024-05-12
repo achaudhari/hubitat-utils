@@ -6,6 +6,7 @@ import json
 import argparse
 import requests
 import random
+from lanmon import LanMonitor
 
 class Worker:
     def __init__(self, dev, hub_xact_fn):
@@ -25,7 +26,7 @@ class Worker:
         return self._hub_xact_fn(*args, **kwargs)
 
 class Pinger(Worker):
-    def __init__(self, dev, hub_xact_fn):
+    def __init__(self, dev, hub_xact_fn, _):
         super(Pinger, self).__init__(dev, hub_xact_fn)
         self.ip_addr = dev['worker-args']['addr']
         self.is_online = None
@@ -50,7 +51,7 @@ class Pinger(Worker):
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 class InternetChecker(Worker):
-    def __init__(self, dev, hub_xact_fn):
+    def __init__(self, dev, hub_xact_fn, _):
         super(InternetChecker, self).__init__(dev, hub_xact_fn)
         self.is_online = None
         self.curl_proc = None
@@ -74,7 +75,7 @@ class InternetChecker(Worker):
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 class MotionPoll(Worker):
-    def __init__(self, dev, hub_xact_fn):
+    def __init__(self, dev, hub_xact_fn, _):
         super(MotionPoll, self).__init__(dev, hub_xact_fn)
         self.curl_proc = None
 
@@ -95,6 +96,25 @@ class MotionPoll(Worker):
                 '-n', self.dev["name"]],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
+class LanMonReader(Worker):
+    def __init__(self, dev, hub_xact_fn, ifaces):
+        super(LanMonReader, self).__init__(dev, hub_xact_fn)
+        self.lanmon = ifaces['lan-monitor']
+        self.ip_addr = dev['worker-args']['addr']
+        self.is_online = None
+
+    def work(self):
+        curr_online = False
+        for ip, _, _, _ in self.lanmon.get_active_clients():
+            if ip == self.ip_addr:
+                curr_online = True
+                break
+        if self.is_online != curr_online:
+            self.hub_transact('dev_cmd', dev_id=self.dev['id'],
+                cmd=('arrived' if curr_online else 'departed'))
+            logging.info(f'{self.dev["name"]}: Online status changed to {curr_online}')
+        self.is_online = curr_online
+
 class EventDaemon:
     def __init__(self, cfg_file, poll_interval):
         CFG_FILE_VER = 1
@@ -114,6 +134,7 @@ class EventDaemon:
             self.avail_devs = {}
             for dev in self.hub_transact('ls_dev'):
                 self.avail_devs[dev['id']] = dev
+            self.worker_ifaces = {'lan-monitor': LanMonitor(**cfg_blob['lan-monitor'])}
             self.workers = {}
             for dev in cfg_blob["devices"]:
                 dev_id = dev['id']
@@ -123,7 +144,7 @@ class EventDaemon:
                     raise RuntimeError(f'Could not access device through Maker API')
                 if dev["poll-interval"] < poll_interval:
                     raise RuntimeError(f'Poll interval of device is less than that of the daemon')
-                self.workers[dev_id] = globals()[dev['worker']](dev, self.hub_transact)
+                self.workers[dev_id] = globals()[dev['worker']](dev, self.hub_transact, self.worker_ifaces)
 
     def hub_transact(self, op, **kwargs):
         url = self.url_fns[op](**kwargs)
@@ -137,13 +158,15 @@ class EventDaemon:
                     worker.work_if_due()
                 time.sleep(self.poll_interval)
             except KeyboardInterrupt:
+                logging.info('Stopping event loop...')
+                self.worker_ifaces['lan-monitor'].stop()
                 logging.info('Event loop terminated')
                 return
 
 def main():
     parser = argparse.ArgumentParser(description='Hubitat Event Notifier Daemon')
-    parser.add_argument('--cfg-json', type=str, default=None, help='Path to JSON config file')
-    parser.add_argument('--poll-interval', type=float, default=10.0, help='Polling interval')
+    parser.add_argument('--cfg-json', type=str, required=True, help='Path to JSON config file')
+    parser.add_argument('--poll-interval', type=float, default=5.0, help='Polling interval')
     parser.add_argument('--verbose', action='store_true', help='Verbose output')
     args = parser.parse_args()
 

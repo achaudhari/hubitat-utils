@@ -109,3 +109,25 @@ class EmailUtils:
             part['Content-Disposition'] = 'attachment; filename="%s"' % os.path.basename(att_fname)
             msg.attach(part)
         EmailUtils._send_msg(msg)
+
+# ---------------------------------------
+#   MAC Address Lookup
+# ---------------------------------------
+class MacAddrDb:
+    def __init__(self, table_dir):
+        FILE_MAP = {'MA-L':'oui.csv', 'MA-M':'mam.csv', 'MA-S':'oui36.csv'}
+        self.mac_tbls = {}
+        for tbl, fname in FILE_MAP.items():
+            self.mac_tbls[tbl] = {}
+            with open(os.path.join(table_dir, fname)) as tbl_f:
+                for csv_l in tbl_f.readlines():
+                    toks = [x.strip() for x in csv_l.split(',')]
+                    self.mac_tbls[tbl][toks[1].upper()] = toks[2]
+
+    def get_vendor(self, mac_addr, default = None):
+        LOOKUPS = {'MA-L':6, 'MA-M':7, 'MA-S':8}
+        mac_clean = mac_addr.replace(':','').upper()
+        for tbl, prefix_len in LOOKUPS.items():
+            if mac_clean[:prefix_len] in self.mac_tbls[tbl]:
+                return self.mac_tbls[tbl][mac_clean[:prefix_len]].strip('"')
+        return default
