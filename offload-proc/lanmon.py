@@ -69,13 +69,14 @@ class RouterIfc:
         return all_clients
 
 class LanMonitor:
-    QUIESCE_HOURS = 12
+    QUIESCE_HOURS = 24
 
     def __init__(self, rtr_ssh_addr, rtr_ssh_port, rtr_ssh_user, mac_tbl_dir, poll_interval,
-                 ignore_mac_addrs = [], notification_email_addr = None):
+                 known_mac_addrs = [], notification_email_addr = None):
         self.rtr_ifc = RouterIfc(rtr_ssh_addr, rtr_ssh_port, rtr_ssh_user, mac_tbl_dir)
         self.interval = poll_interval
-        self.ignore_mac_addrs = set(ignore_mac_addrs)
+        self.known_mac_addrs = set([x.split()[0].lower() for x in known_mac_addrs])
+        self.mac_aliases = {x.split()[0].lower(): ' '.join(x.split()[1:]) for x in known_mac_addrs}
         self.notification_email_addr = notification_email_addr
         self.curr_clients = self.rtr_ifc.get_active_clients()
         self.last_clients = copy.deepcopy(self.curr_clients)
@@ -89,17 +90,22 @@ class LanMonitor:
         while not self.stop_thread:
             next_t = datetime.today() + timedelta(seconds=self.interval)
             with self.lock:
-                self.curr_clients = self.rtr_ifc.get_active_clients()
+                self.curr_clients = []
+                for ip, mac, vendor, name in self.rtr_ifc.get_active_clients():
+                    known_alias = self.mac_aliases[mac] if mac in self.mac_aliases else ''
+                    if name == 'Unknown' and known_alias:
+                        name = f'Known ({known_alias})'
+                    self.curr_clients.append((ip, mac, vendor, name))
             self._handle_new_client_notifications()
             time.sleep((next_t - datetime.today()).total_seconds())
 
     def _handle_new_client_notifications(self):
-        last_macs = set([t[1] for t in self.last_clients]) - self.ignore_mac_addrs
-        curr_macs = set([t[1] for t in self.curr_clients]) - self.ignore_mac_addrs
+        last_macs = set([t[1] for t in self.last_clients]) - self.known_mac_addrs
+        curr_macs = set([t[1] for t in self.curr_clients]) - self.known_mac_addrs
         if last_macs != curr_macs:
             new_client_idxs = []
             for idx, (ip, mac, vendor, client_name) in enumerate(self.curr_clients):
-                if mac not in last_macs and mac not in self.quiesce_tbl:
+                if mac in curr_macs and mac not in last_macs and mac not in self.quiesce_tbl:
                     new_client_idxs.append(idx)
                     self.quiesce_tbl[mac] = datetime.today() + timedelta(hours=LanMonitor.QUIESCE_HOURS)
             new_clients = [self.curr_clients[i] for i in new_client_idxs]
