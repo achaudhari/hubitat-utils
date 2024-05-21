@@ -6,9 +6,11 @@ import json
 import argparse
 import tempfile
 from datetime import datetime
+import subprocess
 
 import dominate
 from dominate.tags import *
+from dominate.util import text
 from sensordb_client import SensorDbClient, SensorHist
 from webshot_ffox import WebScreenshotFirefox
 from common import EmailUtils
@@ -131,6 +133,65 @@ class HistoryReportGen:
         os.unlink(imgs['timeline_dashboard'])
         os.unlink(imgs['environmental_dashboard'])
         logging.info('HistoryReportGen: Email sent')
+
+
+class NetworkReportGen:
+    def __init__(self, clients, verbosity):
+        self.curr_clients = clients
+        self.verbosity = verbosity
+
+    def send_email(self, email_addr):
+        logging.info('NetworkReportGen: Generating network report HTML...')
+        report_time = datetime.now()
+        title = 'Network Report'
+        doc = dominate.document(title=title, doctype=None)
+        with doc:
+            style("""\
+                    table, th, td {
+                        border: 1px solid;
+                        border-collapse: collapse;
+                    }
+                    th, td {
+                        padding-top: 3px; padding-bottom: 3px;
+                        padding-left: 5px; padding-right: 5px;
+                    }
+                  """)
+            h2(title)
+            p(f'{report_time.strftime("%Y-%m-%d %l:%M:%S %p")}',
+              style="font-weight: bold; color:blue")
+            with h3():
+                u('Connected Devices')
+            with table().add(tbody()):
+                with tr():
+                    for hdr in ['IP Address', 'MAC Address', 'Vendor', 'Name']:
+                        td(hdr, style='font-weight: bold;')
+                for nrow, trow in enumerate(self.curr_clients):
+                    with tr():
+                        for tcell in trow:
+                            td(tcell)
+            if self.verbosity in ['full']:
+                logging.info('NetworkReportGen: Running DNS leak test...')
+                dnsleak_out = subprocess.check_output('dnsleaktest.sh', shell=True).strip().decode('utf-8')
+                with h3():
+                    u('DNS Leak Test Report')
+                with pre():
+                    for line in dnsleak_out.split('\n'):
+                        text(line)
+                        br()
+            if self.verbosity in ['full']:
+                logging.info('NetworkReportGen: Running internet speed test...')
+                speedtest_out = subprocess.check_output('speedtest', shell=True).strip().decode('utf-8')
+                with h3():
+                    u('Internet Speed Test Report')
+                with pre():
+                    for line in speedtest_out.split('\n'):
+                        text(line)
+                        br()
+
+        logging.info('NetworkReportGen: Sending email...')
+        subject = f'INFO: Network Report ({report_time.strftime("%Y-%m-%d")})'
+        EmailUtils.send_email_html(email_addr, subject, str(doc))
+        logging.info('NetworkReportGen: Email sent')
 
 
 def main():

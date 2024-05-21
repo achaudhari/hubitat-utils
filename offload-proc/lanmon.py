@@ -7,6 +7,8 @@ import threading
 import subprocess
 import re
 import time
+import fcntl
+import pickle
 import dominate
 from dominate.tags import *
 
@@ -72,12 +74,13 @@ class LanMonitor:
     QUIESCE_HOURS = 24
 
     def __init__(self, rtr_ssh_addr, rtr_ssh_port, rtr_ssh_user, mac_tbl_dir, poll_interval,
-                 known_mac_addrs = [], notification_email_addr = None):
+                 known_mac_addrs = [], notification_email_addr = None, pickle_dump_fname = None):
         self.rtr_ifc = RouterIfc(rtr_ssh_addr, rtr_ssh_port, rtr_ssh_user, mac_tbl_dir)
         self.interval = poll_interval
         self.known_mac_addrs = set([x.split()[0].lower() for x in known_mac_addrs])
         self.mac_aliases = {x.split()[0].lower(): ' '.join(x.split()[1:]) for x in known_mac_addrs}
         self.notification_email_addr = notification_email_addr
+        self.pickle_dump_fname = pickle_dump_fname
         self.curr_clients = self.rtr_ifc.get_active_clients()
         self.last_clients = copy.deepcopy(self.curr_clients)
         self.quiesce_tbl = {}
@@ -97,6 +100,15 @@ class LanMonitor:
                         name = f'Known ({known_alias})'
                     self.curr_clients.append((ip, mac, vendor, name))
             self._handle_new_client_notifications()
+            if self.pickle_dump_fname:
+                with open(self.pickle_dump_fname, 'wb') as pickle_f:
+                    pickle_ds = {
+                        'timestamp': datetime.today(),
+                        'clients': self.curr_clients
+                    }
+                    fcntl.flock(pickle_f.fileno(), fcntl.LOCK_EX)
+                    pickle.dump(pickle_ds, pickle_f, protocol=pickle.HIGHEST_PROTOCOL)
+                    fcntl.flock(pickle_f.fileno(), fcntl.LOCK_UN)
             time.sleep((next_t - datetime.today()).total_seconds())
 
     def _handle_new_client_notifications(self):

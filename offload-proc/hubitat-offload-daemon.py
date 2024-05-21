@@ -8,17 +8,19 @@ import argparse
 import random
 import tempfile
 import requests
+import pickle
 
 from waitress import serve
 from werkzeug.wrappers import Request, Response
 from jsonrpc import JSONRPCResponseManager, dispatcher
 from webshot_ffox import WebScreenshotFirefox
 from common import EmailUtils
-from reportgen import HistoryReportGen
+from reportgen import HistoryReportGen, NetworkReportGen
 
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 CFG_DIR = '/home/admin/cfg'
+CACHE_DIR = '/home/admin/cache'
 RPC_PORT = 4226
 
 def get_host_ip_addr():
@@ -55,6 +57,13 @@ def rpc_email_history_report(email_addr, duration_hr):
     rgen = HistoryReportGen(os.path.join(CFG_DIR, 'history-report.json'),
         os.path.join(CFG_DIR, 'influxdb.cred'))
     rgen.send_email(t_strt, t_stop, email_addr)
+
+def rpc_email_network_report(email_addr, verbosity):
+    logging.info(f'rpc_email_network_report()')
+    with open(os.path.join(CACHE_DIR, 'lanmon_clients.pickle'), 'rb') as handle:
+        lanmon_blob = pickle.load(handle)
+    rgen = NetworkReportGen(lanmon_blob['clients'], verbosity)
+    rgen.send_email(email_addr)
 
 # ---------------------------------------
 #   Roomba Utilities
@@ -223,8 +232,8 @@ def rpc_hub_safe_shutdown(cookie):
     os.system(f'bash {os.path.join(SCRIPT_DIR, "hubitat-admin-ctrl.sh")} shutdown')
     return cookie
 
-SWA_CHECKIN_SCRIPT = '/home/autouser/src/third-party/swa-checkin/southwest.py'
-SWA_CHECKIN_TARGET = 'autouser@hauto-x86-n0.local'
+SWA_CHECKIN_SCRIPT = '/home/admin/src/third-party/swa-checkin/southwest.py'
+SWA_CHECKIN_TARGET = 'admin@hauto-node-x1.local'
 
 def rpc_swa_checkin_schedule(confirmation_arg, fname_arg, lname_arg):
     logging.info(f'rpc_swa_checkin(confirmation={confirmation_arg}, '
@@ -289,6 +298,7 @@ def application(request):
     dispatcher["swa_checkin_schedule"] = rpc_swa_checkin_schedule
     dispatcher["swa_checkin_ls"] = rpc_swa_checkin_ls
     dispatcher["swa_checkin_killall"] = rpc_swa_checkin_killall
+    dispatcher["email_network_report"] = rpc_email_network_report
 
     response = JSONRPCResponseManager.handle(
         request.data, dispatcher)
