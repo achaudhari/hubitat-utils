@@ -191,6 +191,20 @@ def rpc_echo(data):
     logging.info(f'rpc_echo(data={data})')
     return data
 
+def rpc_check_health():
+    logging.info(f'rpc_check_health()')
+    fail_cnt = 0
+    health = {}
+    for svc in ['hubitat-offload', 'hubitat-event', 'roomba-svr']:
+        try:
+            subprocess.check_output(f'systemctl status {svc}', shell=True, stderr=subprocess.STDOUT)
+            health[svc] = 'OKAY'
+        except subprocess.CalledProcessError:
+            fail_cnt += 1
+            health[svc] = 'FAILED'
+    health['overall'] = 'DEGRADED' if fail_cnt else 'OKAY'
+    return health
+
 def rpc_sleep(duration_s):
     logging.info(f'rpc_sleep(duration_s={duration_s})')
     time.sleep(duration_s)
@@ -286,6 +300,7 @@ def rpc_swa_checkin_killall():
 def application(request):
     dispatcher["echo"] = rpc_echo
     dispatcher["sleep"] = rpc_sleep
+    dispatcher["check_health"] = rpc_check_health
     dispatcher["email_web_snapshot"] = rpc_email_web_snapshot
     dispatcher["email_history_report"] = rpc_email_history_report
     dispatcher["email_text"] = rpc_email_text
