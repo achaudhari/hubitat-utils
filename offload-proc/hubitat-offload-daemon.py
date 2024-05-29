@@ -5,7 +5,6 @@ import time
 import datetime
 import logging
 import argparse
-import random
 import tempfile
 import requests
 import pickle
@@ -19,8 +18,10 @@ from reportgen import HistoryReportGen, NetworkReportGen
 
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
-CFG_DIR = '/home/admin/cfg'
-CACHE_DIR = '/home/admin/cache'
+HOME_DIR = os.path.expanduser('~')
+USER_NAME = os.path.basename(HOME_DIR)
+CFG_DIR = os.path.join(HOME_DIR, 'cfg')
+CACHE_DIR = os.path.join(HOME_DIR, 'cache')
 RPC_PORT = 4226
 
 def get_host_ip_addr():
@@ -255,7 +256,7 @@ def rpc_swa_checkin_schedule(confirmation_arg, fname_arg, lname_arg):
     if confirmation_arg.strip():
         checkins = [(confirmation_arg, fname_arg, lname_arg)]
     else:
-        with open(os.path.join(CFG_DIR, 'swa-checkin-cache.csv'), 'r') as csv_f:
+        with open(os.path.join(CACHE_DIR, 'swa-checkin-cache.csv'), 'r') as csv_f:
             checkins = [tuple(l.strip().split(',')) for l in csv_f.readlines()]
 
     delay = 0
@@ -263,7 +264,7 @@ def rpc_swa_checkin_schedule(confirmation_arg, fname_arg, lname_arg):
         cmd = f'ssh {SWA_CHECKIN_TARGET} "sleep {delay}; python3 {SWA_CHECKIN_SCRIPT} {confirmation} {fname} {lname} &"'
         subprocess.Popen([cmd], shell=True) # Nonblocking
         logging.info(f'rpc_swa_checkin: Dispatched {cmd}')
-        delay += 8
+        delay += 20
 
 def rpc_swa_checkin_ls(email_addr):
     logging.info(f'rpc_swa_checkin_ls()')
@@ -280,7 +281,7 @@ def rpc_swa_checkin_ls(email_addr):
     except subprocess.CalledProcessError:
         email_lines = ['INFO: No checkins scheduled at this time']
         cache_lines = []
-    with open(os.path.join(CFG_DIR, 'swa-checkin-cache.csv'), 'w') as csv_f:
+    with open(os.path.join(CACHE_DIR, 'swa-checkin-cache.csv'), 'w') as csv_f:
         for l in cache_lines:
             csv_f.write(f'{l}\n')
     email_body = f'<body>{"<br>".join(email_lines)}</body>{EmailUtils.unique_footer()}'
