@@ -109,7 +109,9 @@ class LanMonitor:
                     fcntl.flock(pickle_f.fileno(), fcntl.LOCK_EX)
                     pickle.dump(pickle_ds, pickle_f, protocol=pickle.HIGHEST_PROTOCOL)
                     fcntl.flock(pickle_f.fileno(), fcntl.LOCK_UN)
-            time.sleep((next_t - datetime.today()).total_seconds())
+            sleep_sec = (next_t - datetime.today()).total_seconds()
+            if sleep_sec > 0.0:
+                time.sleep(sleep_sec)
 
     def _handle_new_client_notifications(self):
         last_macs = set([t[1] for t in self.last_clients]) - self.known_mac_addrs
