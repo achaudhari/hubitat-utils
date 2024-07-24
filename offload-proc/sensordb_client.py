@@ -4,7 +4,7 @@ import os, sys
 import argparse
 import time
 import pytz
-from datetime import datetime
+from datetime import datetime, timedelta
 import re
 from influxdb import InfluxDBClient
 
@@ -42,6 +42,17 @@ def print_table(row_data, cols = None):
             header = False
     print('-' * width)
 
+def write_csv(csv_fname, row_data, cols = None):
+    if not row_data:
+        return
+    if cols is None:
+        cols = list(row_data[0].keys())
+    with open(csv_fname, 'w') as csv_f:
+        csv_f.write((','.join(cols)) + '\n')
+        for r in row_data:
+            csv_f.write((','.join([str(r[k]) for k in cols])) + '\n')
+    print(f'Wrote {csv_fname}')
+
 class SensorDbClient:
     def __init__(self, cred_file):
         with open(cred_file, 'r') as f:
@@ -51,6 +62,13 @@ class SensorDbClient:
 
     def query_raw_sql(self, query):
         return self.client.query(query).get_points()
+
+    def ls_measurements(self):
+        meas = []
+        for rrow in self.query_raw_sql('SHOW MEASUREMENTS'):
+            if not rrow['name'].startswith('_'):
+                meas.append(rrow['name'])
+        return meas
 
     def query(self, measurement, t_strt = None, t_stop = datetime.now(),
               reverse = False, device = '.*', device_regex = True):
@@ -139,19 +157,41 @@ class SensorHist:
 def main():
     parser = argparse.ArgumentParser(description='Hubitat Sensor Influx Database Client')
     parser.add_argument('--creds', type=str, required=True, help='Path to credentials file')
-    parser.add_argument('--meas', type=str, required=True, help='Measurement to query (table name)')
+    parser.add_argument('--meas', type=str, default=None, help='Measurement to query (table name)')
     parser.add_argument('--rev', action='store_true', help='Display results in reverse cron order')
     parser.add_argument('--dev', type=str, default='.*', help='Device name to filter by')
-    parser.add_argument('--start', type=str, default=None, help='Start timestamp (%Y-%m-%d %H:%M:%S)')
-    parser.add_argument('--stop', type=str, default=None, help='Stop timestamp (%Y-%m-%d %H:%M:%S)')
+    parser.add_argument('--start', type=str, required=True, help='Start timestamp (YYYY-MM-DD [HH:MM:SS])')
+    parser.add_argument('--stop', type=str, default=None, help='Stop timestamp (YYYY-MM-DD [HH:MM:SS])')
+    parser.add_argument('--days', type=int, default=None, help='Stop timestamp as days from start')
+    parser.add_argument('--csv-file', type=str, default=None, help='Name of CSV file to write results to')
     args = parser.parse_args()
 
-    client = SensorDbClient(args.creds)
-    query = {"reverse": args.rev, "device": args.dev, "device_regex": True}
-    query["t_strt"] = datetime.strptime(args.start, "%Y-%m-%d %H:%M:%S") if args.start else None
-    query["t_stop"] = datetime.strptime(args.stop, "%Y-%m-%d %H:%M:%S") if args.stop else datetime.now()
+    def parse_ts(ts_str):
+        try:
+            return datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            return datetime.strptime(ts_str, "%Y-%m-%d")
+        except ValueError:
+            raise ValueError(f'Invalid date format: {ts_str}')
 
-    print_table(client.query(args.meas, **query))
+    client = SensorDbClient(args.creds)
+    all_meas = client.ls_measurements()
+    if args.meas not in all_meas:
+        raise RuntimeError(f'--meas invalid or unspecified. Choose from: {",".join(all_meas)}')
+    query = {"reverse": args.rev, "device": args.dev, "device_regex": True}
+    query["t_strt"] = parse_ts(args.start)
+    if args.stop:
+        query["t_stop"] = parse_ts(args.stop)
+    elif args.days:
+        query["t_stop"] = query["t_strt"] + timedelta(days=args.days)
+    else:
+        query["t_stop"] = datetime.now()
+
+    results = client.query(args.meas, **query)
+    print_table(results)
+    if args.csv_file:
+        write_csv(args.csv_file, results)
+
     sens = SensorHist(client, args.meas, query['device'], query["t_strt"], query["t_stop"])
     print(sens.calc_stats())
     print(sens.calc_transitions())
