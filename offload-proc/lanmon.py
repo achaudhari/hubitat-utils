@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import argparse
 import ipaddress
 import threading
+import traceback
 import subprocess
 import re
 import time
@@ -25,17 +26,21 @@ class RouterIfc:
     def _read_ip_neigh(self, max_retries = 3):
         neigh_cache = {}
         for i in range(max_retries):
-            ip_neigh_out = subprocess.check_output(self.ip_neigh_cmd, shell=True).decode('utf-8')
-            for line in ip_neigh_out.split('\n'):
-                toks = [x.strip() for x in line.split()]
-                if len(toks) > 0:
-                    state = toks[-1]
-                    if len(toks) == 6:
-                        ip, mac = toks[0], toks[4]
-                    else:
-                        ip, mac = None, None
-                    neigh_cache[ip] = (mac, state)
-            failed_cnt = len([st for _, (_, st) in neigh_cache.items() if st in ['FAILED', 'INCOMPLETE']])
+            try:
+                ip_neigh_out = subprocess.check_output(self.ip_neigh_cmd, shell=True).decode('utf-8')
+                for line in ip_neigh_out.split('\n'):
+                    toks = [x.strip() for x in line.split()]
+                    if len(toks) > 0:
+                        state = toks[-1]
+                        if len(toks) == 6:
+                            ip, mac = toks[0], toks[4]
+                        else:
+                            ip, mac = None, None
+                        neigh_cache[ip] = (mac, state)
+                failed_cnt = len([st for _, (_, st) in neigh_cache.items() if st in ['FAILED', 'INCOMPLETE']])
+            except Exception:
+                failed_cnt = 1000
+
             if failed_cnt == 0:
                 break
             if i == max_retries - 1:
@@ -85,33 +90,38 @@ class LanMonitor:
         self.last_clients = copy.deepcopy(self.curr_clients)
         self.quiesce_tbl = {}
         self.stop_thread = False
+        self.monitor_error = None
         self.lock = threading.Lock()
         self.mon_thread = threading.Thread(target=self._monitor_loop)
         self.mon_thread.start()
 
     def _monitor_loop(self):
-        while not self.stop_thread:
-            next_t = datetime.today() + timedelta(seconds=self.interval)
+        try:
+            while not self.stop_thread:
+                next_t = datetime.today() + timedelta(seconds=self.interval)
+                with self.lock:
+                    self.curr_clients = []
+                    for ip, mac, vendor, name in self.rtr_ifc.get_active_clients():
+                        known_alias = self.mac_aliases[mac] if mac in self.mac_aliases else ''
+                        if name == 'Unknown' and known_alias:
+                            name = f'Known ({known_alias})'
+                        self.curr_clients.append((ip, mac, vendor, name))
+                self._handle_new_client_notifications()
+                if self.pickle_dump_fname:
+                    with open(self.pickle_dump_fname, 'wb') as pickle_f:
+                        pickle_ds = {
+                            'timestamp': datetime.today(),
+                            'clients': self.curr_clients
+                        }
+                        fcntl.flock(pickle_f.fileno(), fcntl.LOCK_EX)
+                        pickle.dump(pickle_ds, pickle_f, protocol=pickle.HIGHEST_PROTOCOL)
+                        fcntl.flock(pickle_f.fileno(), fcntl.LOCK_UN)
+                sleep_sec = (next_t - datetime.today()).total_seconds()
+                if sleep_sec > 0.0:
+                    time.sleep(sleep_sec)
+        except Exception:
             with self.lock:
-                self.curr_clients = []
-                for ip, mac, vendor, name in self.rtr_ifc.get_active_clients():
-                    known_alias = self.mac_aliases[mac] if mac in self.mac_aliases else ''
-                    if name == 'Unknown' and known_alias:
-                        name = f'Known ({known_alias})'
-                    self.curr_clients.append((ip, mac, vendor, name))
-            self._handle_new_client_notifications()
-            if self.pickle_dump_fname:
-                with open(self.pickle_dump_fname, 'wb') as pickle_f:
-                    pickle_ds = {
-                        'timestamp': datetime.today(),
-                        'clients': self.curr_clients
-                    }
-                    fcntl.flock(pickle_f.fileno(), fcntl.LOCK_EX)
-                    pickle.dump(pickle_ds, pickle_f, protocol=pickle.HIGHEST_PROTOCOL)
-                    fcntl.flock(pickle_f.fileno(), fcntl.LOCK_UN)
-            sleep_sec = (next_t - datetime.today()).total_seconds()
-            if sleep_sec > 0.0:
-                time.sleep(sleep_sec)
+                self.monitor_error = traceback.format_exc()
 
     def _handle_new_client_notifications(self):
         last_macs = set([t[1] for t in self.last_clients]) - self.known_mac_addrs
@@ -168,4 +178,6 @@ class LanMonitor:
 
     def get_active_clients(self):
         with self.lock:
+            if self.monitor_error:
+                raise RuntimeError(f'LanMonitor error: {self.monitor_error}')
             return copy.deepcopy(self.curr_clients)
