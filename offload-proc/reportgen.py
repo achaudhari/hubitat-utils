@@ -78,7 +78,7 @@ class HistoryReportGen:
             'environmental_dashboard': tempfile.mktemp(suffix='.png'),
         }
         webshot.take(self.grafana_link('timeline', t_strt, t_stop),
-            imgs['timeline_dashboard'], 5.0, 1080, 1500)
+            imgs['timeline_dashboard'], 5.0, 1080, 1850)
         webshot.take(self.grafana_link('environmental', t_strt, t_stop),
             imgs['environmental_dashboard'], 3.0, 1080, 1050)
 

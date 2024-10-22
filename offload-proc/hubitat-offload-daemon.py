@@ -24,9 +24,21 @@ CFG_DIR = os.path.join(HOME_DIR, 'cfg')
 CACHE_DIR = os.path.join(HOME_DIR, 'cache')
 RPC_PORT = 4226
 
-def get_host_ip_addr():
+def get_host_ip_addr(wait_for_network = True, timeout = 30):
     cmd = "hostname -i | awk '{print $1}'"
-    return subprocess.check_output(cmd, shell=True).strip().decode('utf-8')
+    get_ip = lambda: subprocess.check_output(cmd, shell=True).strip().decode('utf-8')
+    is_lo_addr = lambda ip: ip.split('.')[0] == '127'
+    ip = get_ip()
+    elapsed = 0
+    # Retry command until loopback interface addr disappears
+    while wait_for_network and is_lo_addr(ip):
+        if elapsed >= timeout:
+            break
+        elapsed += 1
+        time.sleep(1.0)
+        print('WARNING: Network is initializing. Retrying host IP...')
+        ip = get_ip()
+    return ip
 
 def rpc_email_text(email_addr, subject, email_body):
     email_body = email_body.replace('\n', '<br>').replace('\t', '&emsp;')
@@ -243,8 +255,10 @@ def rpc_shutdown_sys(cookie):
 def rpc_hub_safe_shutdown(cookie):
     logging.info(f'rpc_hub_safe_shutdown(cookie={cookie})')
     hub_authenticate(cookie)
-    logging.info('rpc_hub_safe_shutdown: Permission granted. Shutting down hub...')
+    logging.info('rpc_hub_safe_shutdown: Permission granted. Shutting down hub and system...')
     os.system(f'bash {os.path.join(SCRIPT_DIR, "hubitat-admin-ctrl.sh")} shutdown')
+    time.sleep(10.0)
+    subprocess.Popen(['sleep 3; sudo /sbin/shutdown -h now'], shell=True) # Nonblocking
     return cookie
 
 SWA_CHECKIN_SCRIPT = '/home/admin/src/third-party/swa-checkin/southwest.py'
