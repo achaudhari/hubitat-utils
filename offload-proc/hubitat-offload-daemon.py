@@ -262,7 +262,7 @@ def rpc_hub_safe_shutdown(cookie):
     return cookie
 
 SWA_CHECKIN_SCRIPT = '/home/admin/src/third-party/swa-checkin/southwest.py'
-SWA_CHECKIN_TARGET = 'admin@hauto-node-x1.local'
+SWA_CHECKIN_TARGET = 'admin@hauto-node-g2.local'
 
 def rpc_swa_checkin_schedule(confirmation_arg, fname_arg, lname_arg):
     logging.info(f'rpc_swa_checkin(confirmation={confirmation_arg}, '
