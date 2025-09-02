@@ -1,0 +1,20 @@
+FROM debian:bookworm-slim
+ENV DEBIAN_FRONTEND=noninteractive PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 python3-pip python3-venv ca-certificates \
+    curl iputils-ping openssl openssh-client \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN useradd -ms /bin/bash admin
+WORKDIR /home/admin/src
+COPY requirements.event.txt ./
+RUN python3 -m pip install --break-system-packages --upgrade pip && pip install --break-system-packages -r requirements.event.txt
+COPY . /home/admin/src
+RUN chown -R admin:admin /home/admin/src
+COPY entrypoint-event.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh && chown admin:admin /entrypoint.sh
+VOLUME ["/home/admin/cfg", "/home/admin/cache", "/home/admin/.ssh"]
+USER admin
+ENV EVENT_CFG_JSON=/home/admin/cfg/event-daemon.json POLL_INTERVAL=5.0
+ENTRYPOINT ["/entrypoint.sh"]

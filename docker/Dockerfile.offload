@@ -1,0 +1,26 @@
+FROM debian:bookworm-slim
+ENV DEBIAN_FRONTEND=noninteractive PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 python3-pip python3-venv ca-certificates \
+    curl iputils-ping openssl openssh-client \
+    firefox-esr msmtp-mta speedtest-cli dnsutils \
+    libgtk-3-0 libdbus-glib-1-2 libasound2 libx11-xcb1 libxtst6 libxrandr2 libxdamage1 libxcomposite1 \
+    libxcursor1 libxi6 libxss1 libxfixes3 libnss3 libnspr4 libxkbcommon0 libatk1.0-0 libatk-bridge2.0-0 \
+    libdrm2 libgbm1 libpango-1.0-0 libpangocairo-1.0-0 libatspi2.0-0 fonts-liberation \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN useradd -ms /bin/bash admin
+WORKDIR /home/admin/src
+COPY requirements.offload.txt ./
+RUN python3 -m pip install --break-system-packages --upgrade pip && pip install --break-system-packages -r requirements.offload.txt
+COPY . /home/admin/src
+RUN chown -R admin:admin /home/admin/src && \
+    ln -sf /usr/bin/speedtest-cli /usr/local/bin/speedtest || true
+COPY entrypoint-offload.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh && chown admin:admin /entrypoint.sh
+VOLUME ["/home/admin/cfg", "/home/admin/cache", "/home/admin/.ssh"]
+USER admin
+EXPOSE 4226
+ENV RPC_ADDR=0.0.0.0 RPC_PORT=4226 PROCESSES=3
+ENTRYPOINT ["/entrypoint.sh"]

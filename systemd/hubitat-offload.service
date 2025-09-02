@@ -1,0 +1,29 @@
+[Unit]
+Description=Hubitat Offload RPC Daemon (Docker)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/default/hubitat-offload
+# Ensure container not already running
+ExecStartPre=-/usr/bin/docker rm -f hubitat-offload
+ExecStartPre=/bin/bash -c 'if [ "${AUTO_PULL}" = "1" ]; then /usr/bin/docker pull "${IMAGE}"; fi'
+ExecStart=/usr/bin/docker run --rm \
+  --name hubitat-offload \
+  $DOCKER_EXTRA_ARGS \
+  -e RPC_ADDR=${RPC_ADDR} -e RPC_PORT=${RPC_PORT} -e PROCESSES=${PROCESSES} \
+  -v /opt/hubitat/cfg:/home/admin/cfg \
+  -v /opt/hubitat/cache:/home/admin/cache \
+  -v /home/admin/.ssh:/home/admin/.ssh:ro \
+  ${IMAGE}
+ExecStop=/usr/bin/docker stop hubitat-offload
+Restart=always
+RestartSec=5s
+TimeoutStopSec=30s
+KillMode=control-group
+OOMScoreAdjust=-500
+LimitNOFILE=65536
+
+[Install]
+WantedBy=hubitat.target

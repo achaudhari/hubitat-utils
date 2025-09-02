@@ -1,0 +1,38 @@
+version: '3.9'
+services:
+  hubitat-offload:
+    build:
+      context: .
+      dockerfile: Dockerfile.offload
+    container_name: hubitat-offload
+    restart: unless-stopped
+    environment:
+      RPC_ADDR: 0.0.0.0
+      RPC_PORT: 4226
+      PROCESSES: 3
+    volumes:
+      - ./cfg:/home/admin/cfg
+      - ./cache:/home/admin/cache
+      - ~/.ssh:/home/admin/.ssh:ro
+    ports:
+      - "4226:4226"
+    depends_on:
+      - hubitat-event
+
+  hubitat-event:
+    build:
+      context: .
+      dockerfile: Dockerfile.event
+    container_name: hubitat-event
+    restart: unless-stopped
+    environment:
+      EVENT_CFG_JSON: /home/admin/cfg/event-daemon.json
+      POLL_INTERVAL: 5.0
+    volumes:
+      - ./cfg:/home/admin/cfg
+      - ./cache:/home/admin/cache
+      - ~/.ssh:/home/admin/.ssh:ro
+
+volumes:
+  cfg:
+  cache:

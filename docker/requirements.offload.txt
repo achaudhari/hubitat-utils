@@ -1,0 +1,9 @@
+requests
+waitress
+werkzeug
+json-rpc
+selenium
+dominate
+influxdb
+pytz
+speedtest-cli
