@@ -299,8 +299,8 @@ def rpc_swa_checkin_ls(email_addr):
         for l in cache_lines:
             csv_f.write(f'{l}\n')
     email_body = f'<body>{"<br>".join(email_lines)}</body>{EmailUtils.unique_footer()}'
-    EmailUtils.send_email_html(email_addr,
-        'Southwest Check-in Status', f'<html>{email_body}</html>')
+    subject = f'INFO: Southwest Check-in Status ({datetime.datetime.now().strftime("%Y-%m-%d")})'
+    EmailUtils.send_email_html(email_addr, subject, f'<html>{email_body}</html>')
 
 def rpc_swa_checkin_killall():
     logging.info(f'rpc_swa_checkin_killall()')
