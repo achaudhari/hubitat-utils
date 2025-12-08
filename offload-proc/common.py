@@ -19,11 +19,13 @@ import mimetypes
 # ---------------------------------------
 class EmailUtils:
     @staticmethod
-    def _send_msg(msg):
+    def _send_msg(from_addr, to_addr, msg):
         with tempfile.NamedTemporaryFile(suffix='.eml', delete=False) as eml_f:
             eml_f.write(msg.as_bytes())
             eml_f.flush()
-            subprocess.check_call(f'sendmail -t < {eml_f.name}', shell=True)
+            subprocess.check_call(
+                f'msmtp -f {from_addr} -t < {eml_f.name} > /dev/null 2>&1',
+                shell=True)
 
     @staticmethod
     def _gen_msg_id():
@@ -49,7 +51,7 @@ class EmailUtils:
             body += EmailUtils.unique_footer()
         body = MIMEText(f'<html><body>{body}</body></html>', _subtype='html')
         msg.attach(body)
-        EmailUtils._send_msg(msg)
+        EmailUtils._send_msg(email_addr, email_addr, msg)
 
     @staticmethod
     def send_email_image(email_addr, subject, img_fname):
@@ -76,7 +78,7 @@ class EmailUtils:
             attachment.add_header('Content-ID', '<img_payload>')
             attachment.add_header('Content-Disposition', 'inline', filename=img_fname)
         msg.attach(attachment)
-        EmailUtils._send_msg(msg)
+        EmailUtils._send_msg(email_addr, email_addr, msg)
 
     @staticmethod
     def send_email_html(email_addr, subject, body_html, inline_images = {}, attachments = []):
@@ -108,7 +110,7 @@ class EmailUtils:
                 part = MIMEApplication(fd.read(), Name=os.path.basename(att_fname))
             part['Content-Disposition'] = 'attachment; filename="%s"' % os.path.basename(att_fname)
             msg.attach(part)
-        EmailUtils._send_msg(msg)
+        EmailUtils._send_msg(email_addr, email_addr, msg)
 
 # ---------------------------------------
 #   MAC Address Lookup
