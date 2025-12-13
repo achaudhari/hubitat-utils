@@ -1,0 +1,47 @@
+# Git files
+.git
+.gitignore
+.gitattributes
+
+# Docker files
+Dockerfile
+docker-compose.yml
+docker-compose.*.yml
+.dockerignore
+
+# Python cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist
+build
+
+# IDE files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Documentation (not needed in image)
+README*.md
+*.md
+!requirements.txt
+
+# Config and cache (mounted as volumes)
+config/
+cache/
+grafana/
+influxdb/
+
+# Other directories not needed in build
+odroid-c2/

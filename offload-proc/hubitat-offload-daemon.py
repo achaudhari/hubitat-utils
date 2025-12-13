@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import os, sys
+import os
 import subprocess
 import time
 import datetime
@@ -8,20 +8,20 @@ import argparse
 import tempfile
 import requests
 import pickle
+import hashlib
+import hmac
 
 from waitress import serve
 from werkzeug.wrappers import Request, Response
 from jsonrpc import JSONRPCResponseManager, dispatcher
-from webshot_ffox import WebScreenshotFirefox
 from common import EmailUtils
 from reportgen import HistoryReportGen, NetworkReportGen
+# from webshot_ffox import WebScreenshotFirefox
 
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
-HOME_DIR = os.path.expanduser('~')
-USER_NAME = os.path.basename(HOME_DIR)
-CFG_DIR = os.path.join(HOME_DIR, 'cfg')
-CACHE_DIR = os.path.join(HOME_DIR, 'cache')
+CFG_DIR = '/etc/hauto'
+CACHE_DIR = '/var/hauto'
 RPC_PORT = 4226
 
 def get_host_ip_addr(wait_for_network = True, timeout = 30):
@@ -50,25 +50,25 @@ def rpc_email_text(email_addr, subject, email_body):
 def rpc_email_web_snapshot(email_addr, subject, page_url, load_delay):
     logging.info(f'rpc_email_web_snapshot(email_addr={email_addr}, subject={subject}, '
         f'page_url={page_url}, load_delay={load_delay})')
-    # Open headless firefox and resize window
-    logging.info('rpc_email_web_snapshot: Starting browser...')
-    webshot = WebScreenshotFirefox()
-    # Load URL and save screenshot
-    logging.info('rpc_email_web_snapshot: Loading page and saving screenshot...')
-    dashboard_img_path = tempfile.mktemp(suffix='.png')
-    webshot.take(page_url, dashboard_img_path, load_delay, 900)
-    # Create email and send
-    logging.info('rpc_email_web_snapshot: Sending email...')
-    EmailUtils.send_email_image(email_addr, subject, dashboard_img_path)
-    os.unlink(dashboard_img_path)
-    logging.info('rpc_email_web_snapshot: Finished successfully')
+    raise NotImplementedError('Operation DEPRECATED')
+    # # Open headless firefox and resize window
+    # logging.info('rpc_email_web_snapshot: Starting browser...')
+    # webshot = WebScreenshotFirefox()
+    # # Load URL and save screenshot
+    # logging.info('rpc_email_web_snapshot: Loading page and saving screenshot...')
+    # dashboard_img_path = tempfile.mktemp(suffix='.png')
+    # webshot.take(page_url, dashboard_img_path, load_delay, 900)
+    # # Create email and send
+    # logging.info('rpc_email_web_snapshot: Sending email...')
+    # EmailUtils.send_email_image(email_addr, subject, dashboard_img_path)
+    # os.unlink(dashboard_img_path)
+    # logging.info('rpc_email_web_snapshot: Finished successfully')
 
 def rpc_email_history_report(email_addr, duration_hr):
     logging.info(f'rpc_email_history_report(email_addr={email_addr}, duration_hr={duration_hr})')
     t_stop = datetime.datetime.now()
     t_strt = t_stop - datetime.timedelta(hours=duration_hr)
-    rgen = HistoryReportGen(os.path.join(CFG_DIR, 'history-report.json'),
-        os.path.join(CFG_DIR, 'influxdb.cred'))
+    rgen = HistoryReportGen(os.path.join(CFG_DIR, 'history-report.json'))
     rgen.send_email(t_strt, t_stop, email_addr)
 
 def rpc_email_network_report(email_addr, verbosity):
@@ -82,8 +82,8 @@ def rpc_email_network_report(email_addr, verbosity):
 #   Roomba Utilities
 # ---------------------------------------
 class RoombaUtils:
-    STATE_URL = 'http://localhost:8200/api/local/info/state'
-    ACTION_URL_BASE = 'http://localhost:8200/api/local/action/'
+    STATE_URL = 'http://roomba-python:8200/api/local/info/state'
+    ACTION_URL_BASE = 'http://roomba-python:8200/api/local/action/'
 
     @staticmethod
     def get_full_state():
@@ -138,7 +138,7 @@ class RoombaUtils:
                     'stuck'     : 'Stuck',
                     'hmUsrDock' : 'Sent Home',
                     'hmMidMsn'  : 'Mid Dock',
-                    'hmPostMsn' : 'Final Dock' 
+                    'hmPostMsn' : 'Final Dock'
                 }[reported['cleanMissionStatus']['phase']]
             except KeyError:
                 pretty_state['phase'] = 'Roomba ' + reported['cleanMissionStatus']['phase']
@@ -172,31 +172,6 @@ def rpc_roomba_send_cmd(action):
     RoombaUtils.send_cmd(action)
 
 # ---------------------------------------
-#   Motion daemon Utilities
-# ---------------------------------------
-class MotionUtils:
-    BASE_URL = 'http://localhost:3724'
-
-    @staticmethod
-    def send_cmd(cam_id, cmd):
-        CMD_MAP = {
-            'restart': 'action/end',
-            'eventstart': 'action/eventstart',
-            'eventend': 'action/eventend',
-            'status': 'detection/connection'
-        }
-        response = requests.get(f'{MotionUtils.BASE_URL}/{cam_id}/{CMD_MAP[cmd]}')
-        return [response.text]
-
-def rpc_motion_send_cmd(cam_id, cmd):
-    logging.info(f'rpc_motion_send_cmd(cam_id={cam_id}, cmd={cmd})')
-    try:
-        response = MotionUtils.send_cmd(cam_id, cmd)
-    except Exception as e:
-        raise RuntimeError(str(e))
-    return response
-
-# ---------------------------------------
 #   Generic
 # ---------------------------------------
 
@@ -224,32 +199,56 @@ def rpc_sleep(duration_s):
     return 0
 
 def hub_authenticate(cookie):
-    with open(os.path.join(CFG_DIR, 'hubitat.secret'), 'r') as sec_f:
-        shared_sec = sec_f.readline().strip()
-    # Encrypted using $ cat /sys/class/net/eth0/address | cut -c -18 | openssl enc -e -des3 -base64 -pass pass:${shared_sec} -pbkdf2
+    shared_sec = os.environ.get('HUBITAT_SECRET')
+    if not shared_sec:
+        raise PermissionError('HUBITAT_SECRET environment variable not set. Permission denied.')
+    resp_lcl = os.environ.get('ETH_IFACE_MAC')
+    if not shared_sec:
+        raise PermissionError('ETH_IFACE_MAC environment variable not set. Permission denied.')
+
+    # Cookie is the MAC address encrypted using:
+    # $ cat /sys/class/net/wan/address | cut -c -18 | openssl enc -e -des3 -base64 -pass pass:${shared_sec} -pbkdf2
     try:
         resp_rem = subprocess.check_output(
             f'echo "{cookie}" | openssl enc -d -des3 -base64 -pass pass:{shared_sec} -pbkdf2',
-            shell=True).strip().decode('utf-8')
-        resp_lcl = subprocess.check_output('cat /sys/class/net/eth0/address',
             shell=True).strip().decode('utf-8')
     except:
         raise PermissionError('Secret validation failed. Permission denied.')
     if resp_rem != resp_lcl:
         raise PermissionError('Secret validation failed. Permission denied.')
 
+def send_power_mgmt_cmd(action):
+    """Send authenticated request to power-mgmt service"""
+    secret = os.environ.get('HUBITAT_SECRET')
+    if not secret:
+        raise PermissionError('HUBITAT_SECRET not set')
+
+    # Generate HMAC token for the endpoint
+    endpoint = f'/{action}'
+    token = hmac.new(secret.encode(), endpoint.encode(), hashlib.sha256).hexdigest()
+
+    # Send request to power-mgmt container via host network
+    url = f'http://power-mgmt:9999{endpoint}'
+    headers = {'Authorization': f'Bearer {token}'}
+
+    response = requests.post(url, headers=headers, timeout=5)
+    response.raise_for_status()
+    return response.json()
+
 def rpc_reboot_sys(cookie):
     logging.info(f'rpc_reboot_sys(cookie={cookie})')
     hub_authenticate(cookie)
-    logging.info('rpc_reboot_sys: Permission granted. Rebooting system...')
-    subprocess.Popen(['sleep 3; sudo /sbin/reboot'], shell=True) # Nonblocking
+    logging.info('rpc_reboot_sys: Permission granted. Sending reboot command to power-mgmt...')
+    result = send_power_mgmt_cmd('reboot')
+    logging.info(f'rpc_reboot_sys: {result}')
     return cookie
 
 def rpc_shutdown_sys(cookie):
     logging.info(f'rpc_shutdown_sys(cookie={cookie})')
     hub_authenticate(cookie)
-    logging.info('rpc_shutdown_sys: Permission granted. Shutting system down...')
-    subprocess.Popen(['sleep 3; sudo /sbin/shutdown -h now'], shell=True) # Nonblocking
+    logging.info('rpc_shutdown_sys: Permission granted. Sending shutdown command to power-mgmt...')
+    result = send_power_mgmt_cmd('shutdown')
+    logging.info(f'rpc_shutdown_sys: {result}')
     return cookie
 
 def rpc_hub_safe_shutdown(cookie):
@@ -260,52 +259,6 @@ def rpc_hub_safe_shutdown(cookie):
     time.sleep(10.0)
     subprocess.Popen(['sleep 3; sudo /sbin/shutdown -h now'], shell=True) # Nonblocking
     return cookie
-
-SWA_CHECKIN_SCRIPT = '/home/admin/src/third-party/swa-checkin/southwest.py'
-SWA_CHECKIN_TARGET = 'admin@hauto-node-g2.local'
-
-def rpc_swa_checkin_schedule(confirmation_arg, fname_arg, lname_arg):
-    logging.info(f'rpc_swa_checkin(confirmation={confirmation_arg}, '
-        f'fname={fname_arg}, lname={lname_arg})')
-    if confirmation_arg.strip():
-        checkins = [(confirmation_arg, fname_arg, lname_arg)]
-    else:
-        with open(os.path.join(CACHE_DIR, 'swa-checkin-cache.csv'), 'r') as csv_f:
-            checkins = [tuple(l.strip().split(',')) for l in csv_f.readlines()]
-
-    delay = 0
-    for confirmation, fname, lname in checkins:
-        cmd = f'ssh {SWA_CHECKIN_TARGET} "sleep {delay}; python3 {SWA_CHECKIN_SCRIPT} {confirmation} {fname} {lname} &"'
-        subprocess.Popen([cmd], shell=True) # Nonblocking
-        logging.info(f'rpc_swa_checkin: Dispatched {cmd}')
-        delay += 20
-
-def rpc_swa_checkin_ls(email_addr):
-    logging.info(f'rpc_swa_checkin_ls()')
-    cmd = f'ssh {SWA_CHECKIN_TARGET} "pgrep -af {SWA_CHECKIN_SCRIPT}"'
-    reservations = set()
-    try:
-        for line in subprocess.check_output([cmd], shell=True, encoding='UTF-8').split('\n'):
-            toks = line.split(' ')
-            if len(toks) == 6:
-                reservations.add(tuple(toks[3:6]))
-        email_lines = ['INFO: Checkins currently scheduled'] + \
-                      [f'* {c}: {f} {l}' for c,f,l in reservations]
-        cache_lines = [f'{c},{f},{l}' for c,f,l in reservations]
-    except subprocess.CalledProcessError:
-        email_lines = ['INFO: No checkins scheduled at this time']
-        cache_lines = []
-    with open(os.path.join(CACHE_DIR, 'swa-checkin-cache.csv'), 'w') as csv_f:
-        for l in cache_lines:
-            csv_f.write(f'{l}\n')
-    email_body = f'<body>{"<br>".join(email_lines)}</body>{EmailUtils.unique_footer()}'
-    subject = f'INFO: Southwest Check-in Status ({datetime.datetime.now().strftime("%Y-%m-%d")})'
-    EmailUtils.send_email_html(email_addr, subject, f'<html>{email_body}</html>')
-
-def rpc_swa_checkin_killall():
-    logging.info(f'rpc_swa_checkin_killall()')
-    cmd = f'ssh {SWA_CHECKIN_TARGET} "pkill -f {SWA_CHECKIN_SCRIPT}"'
-    subprocess.Popen([cmd], shell=True)
 
 # ---------------------------------------
 #   Main application
@@ -321,13 +274,9 @@ def application(request):
     dispatcher["email_text"] = rpc_email_text
     dispatcher["roomba_get_state"] = rpc_roomba_get_state
     dispatcher["roomba_send_cmd"] = rpc_roomba_send_cmd
-    dispatcher["motion_send_cmd"] = rpc_motion_send_cmd
     dispatcher["reboot"] = rpc_reboot_sys
     dispatcher["shutdown"] = rpc_shutdown_sys
     dispatcher["hub_safe_shutdown"] = rpc_hub_safe_shutdown
-    dispatcher["swa_checkin_schedule"] = rpc_swa_checkin_schedule
-    dispatcher["swa_checkin_ls"] = rpc_swa_checkin_ls
-    dispatcher["swa_checkin_killall"] = rpc_swa_checkin_killall
     dispatcher["email_network_report"] = rpc_email_network_report
 
     response = JSONRPCResponseManager.handle(

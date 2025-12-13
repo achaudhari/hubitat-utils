@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
-import os
+# import os
 import logging
 import json
 import argparse
-import tempfile
+# import tempfile
 from datetime import datetime
 import subprocess
 
@@ -12,15 +12,15 @@ import dominate
 from dominate.tags import *
 from dominate.util import text
 from sensordb_client import SensorDbClient, SensorHist
-from webshot_ffox import WebScreenshotFirefox
+# from webshot_ffox import WebScreenshotFirefox
 from common import EmailUtils
 
 def meas_dev(pair):
     return pair['meas'], pair['device']
 
 class HistoryReportGen:
-    def __init__(self, cfg_file, cred_file):
-        self.dbcli = SensorDbClient(cred_file)
+    def __init__(self, cfg_file):
+        self.dbcli = SensorDbClient()
         with open(cfg_file) as json_f:
             self.senscfg = json.load(json_f)
 
@@ -70,17 +70,17 @@ class HistoryReportGen:
             camera_tbl.append((d['name'], *tuple(vals)))
         event_log.sort()
 
-        logging.info('HistoryReportGen: Starting browser...')
-        webshot = WebScreenshotFirefox()
-        logging.info('HistoryReportGen: Taking grafana screenshots...')
-        imgs = {
-            'timeline_dashboard': tempfile.mktemp(suffix='.png'),
-            'environmental_dashboard': tempfile.mktemp(suffix='.png'),
-        }
-        webshot.take(self.grafana_link('timeline', t_strt, t_stop),
-            imgs['timeline_dashboard'], 5.0, 1080, 1850)
-        webshot.take(self.grafana_link('environmental', t_strt, t_stop),
-            imgs['environmental_dashboard'], 3.0, 1080, 1050)
+        # logging.info('HistoryReportGen: Starting browser...')
+        # webshot = WebScreenshotFirefox()
+        # logging.info('HistoryReportGen: Taking grafana screenshots...')
+        # imgs = {
+        #     'timeline_dashboard': tempfile.mktemp(suffix='.png'),
+        #     'environmental_dashboard': tempfile.mktemp(suffix='.png'),
+        # }
+        # webshot.take(self.grafana_link('timeline', t_strt, t_stop),
+        #     imgs['timeline_dashboard'], 5.0, 1080, 1850)
+        # webshot.take(self.grafana_link('environmental', t_strt, t_stop),
+        #     imgs['environmental_dashboard'], 3.0, 1080, 1050)
 
         logging.info('HistoryReportGen: Generating HTML...')
         title = 'Sensor History Report'
@@ -99,12 +99,19 @@ class HistoryReportGen:
             h2(title)
             p(f'{t_strt.strftime("%Y-%m-%d %l:%M:%S %p")} - {t_stop.strftime("%Y-%m-%d %l:%M:%S %p")}',
               style="font-weight: bold; color:blue")
-            with h3():
-                u('Activity Timeline')
-            img(src="cid:timeline_dashboard")
-            with h3():
-                u('Environmental')
-            img(src="cid:environmental_dashboard")
+            # Add Grafana links
+            a('Grafana: Activity Timeline',
+              href=self.grafana_link('timeline', t_strt, t_stop), target='_blank')
+            br()
+            a('Grafana: Environmental',
+              href=self.grafana_link('environmental', t_strt, t_stop), target='_blank')
+            br()
+            # with h3():
+            #     u('Activity Timeline')
+            # img(src="cid:timeline_dashboard")
+            # with h3():
+            #     u('Environmental')
+            # img(src="cid:environmental_dashboard")
             tbl_def = [('Door Summary', door_tbl), 
                        ('Motion Summary', motion_tbl), ('Camera Summary', camera_tbl)]
             for tname, tdata in tbl_def:
@@ -129,9 +136,10 @@ class HistoryReportGen:
 
         logging.info('HistoryReportGen: Sending email...')
         subject = f'INFO: Sensor History ({t_stop.strftime("%Y-%m-%d")})'
-        EmailUtils.send_email_html(email_addr, subject, str(doc), imgs)
-        os.unlink(imgs['timeline_dashboard'])
-        os.unlink(imgs['environmental_dashboard'])
+        EmailUtils.send_email_html(email_addr, subject, str(doc))
+        # EmailUtils.send_email_html(email_addr, subject, str(doc), imgs)
+        # os.unlink(imgs['timeline_dashboard'])
+        # os.unlink(imgs['environmental_dashboard'])
         logging.info('HistoryReportGen: Email sent')
 
 
@@ -180,7 +188,7 @@ class NetworkReportGen:
                         br()
             if self.verbosity in ['full']:
                 logging.info('NetworkReportGen: Running internet speed test...')
-                speedtest_out = subprocess.check_output('speedtest', shell=True).strip().decode('utf-8')
+                speedtest_out = subprocess.check_output('speedtest --accept-license', shell=True).strip().decode('utf-8')
                 with h3():
                     u('Internet Speed Test Report')
                 with pre():
@@ -197,7 +205,6 @@ class NetworkReportGen:
 def main():
     parser = argparse.ArgumentParser(description='Hubitat Event Notifier Daemon')
     parser.add_argument('--cfg-json', type=str, default=None, help='Path to JSON config file')
-    parser.add_argument('--creds', type=str, required=True, help='Path to credentials file')
     parser.add_argument('--email', type=str, required=True, help='Email address')
     parser.add_argument('--start', type=str, default=None, help='Start timestamp (%Y-%m-%d %H:%M:%S)')
     parser.add_argument('--stop', type=str, default=None, help='Stop timestamp (%Y-%m-%d %H:%M:%S)')
@@ -210,7 +217,7 @@ def main():
     t_strt = datetime.strptime(args.start, "%Y-%m-%d %H:%M:%S") if args.start else None
     t_stop = datetime.strptime(args.stop, "%Y-%m-%d %H:%M:%S") if args.stop else datetime.now()
 
-    rgen = HistoryReportGen(args.cfg_json, args.creds)
+    rgen = HistoryReportGen(args.cfg_json)
     rgen.send_email(t_strt, t_stop, args.email)
 
 if __name__ == '__main__':

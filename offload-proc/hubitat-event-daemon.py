@@ -4,8 +4,8 @@ import time
 import logging
 import json
 import argparse
-import requests
 import random
+import requests
 from lanmon import LanMonitor
 
 class Worker:
@@ -74,28 +74,6 @@ class InternetChecker(Worker):
             self.curl_proc = subprocess.Popen(['curl', '-m', '5', '-I', 'http://www.example.com'],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-class MotionPoll(Worker):
-    def __init__(self, dev, hub_xact_fn, _):
-        super(MotionPoll, self).__init__(dev, hub_xact_fn)
-        self.curl_proc = None
-
-    def work(self):
-        dispatch_poll = False
-        if self.curl_proc is not None:
-            if self.curl_proc.poll() is not None:
-                self.curl_proc.communicate()
-                dispatch_poll = True
-                if self.curl_proc.returncode > 0:
-                    self.hub_transact('dev_cmd', dev_id=self.dev['id'], cmd='active')
-                    logging.info(f'{self.dev["name"]}: Motion detected')
-        else:
-            dispatch_poll = True
-        if dispatch_poll:
-            self.curl_proc = subprocess.Popen(['python3', '/usr/local/bin/motion-poll.py',
-                '-d', self.dev['worker-args']['dir'], '-e', self.dev['worker-args']['email'],
-                '-n', self.dev["name"]],
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
 class LanMonReader(Worker):
     def __init__(self, dev, hub_xact_fn, ifaces):
         super(LanMonReader, self).__init__(dev, hub_xact_fn)
@@ -120,7 +98,9 @@ class EventDaemon:
         CFG_FILE_VER = 1
         self.poll_interval = poll_interval
         with open(cfg_file) as json_f:
+            print(cfg_file)
             cfg_blob = json.load(json_f)
+            print(cfg_blob)
             if cfg_blob['version'] != CFG_FILE_VER:
                 raise RuntimeError(f'Config file has the wrong version')
             url_prefix = f'http://{cfg_blob["hubitat-addr"]}/apps/api/{cfg_blob["maker-api"]["id"]}/devices/'

@@ -35,9 +35,9 @@ class EmailUtils:
     @staticmethod
     def unique_footer():
         rand_md5 = hashlib.md5(datetime.datetime.utcnow().isoformat().encode()).hexdigest()
-        return f'<span style="max-height:0;max-width:0;display:inline-block;' \
+        return f'<br><span style="max-height:0;max-width:0;display:inline-block;' \
                f'mso-font-width:0%;mso-style-textfill-type:none;white-space:nowrap;' \
-               f'font-size:1px;color:rgba(0,0,0,0);text-indent:9px;">{rand_md5}</span>'
+               f'font-size:1px;color:rgba(0,0,0,0);text-indent:9px;">MsgId:{rand_md5}</span>'
 
     @staticmethod
     def send_email_text(email_addr, subject, body, uniquify = True):

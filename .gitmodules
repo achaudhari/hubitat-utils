@@ -1,0 +1,3 @@
+[submodule "roomba"]
+	path = roomba
+	url = ssh://git@git.heliologic.xyz/ashishsee/Roomba980-Python.git

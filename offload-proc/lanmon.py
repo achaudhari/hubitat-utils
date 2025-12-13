@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import copy
 from datetime import datetime, timedelta
-import argparse
 import ipaddress
 import threading
 import traceback
@@ -18,8 +17,9 @@ from common import EmailUtils
 
 class RouterIfc:
     def __init__(self, ssh_addr, ssh_port, ssh_user, mac_tbl_dir):
-        self.arp_cmd = f'ssh {ssh_user}@{ssh_addr} -p {ssh_port} arp -a'
-        self.ip_neigh_cmd = f'ssh {ssh_user}@{ssh_addr} -p {ssh_port} ip neigh'
+        ssh_opts = "-o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+        self.arp_cmd = f'ssh {ssh_opts} {ssh_user}@{ssh_addr} -p {ssh_port} arp -a 2>/dev/null'
+        self.ip_neigh_cmd = f'ssh {ssh_opts} {ssh_user}@{ssh_addr} -p {ssh_port} ip neigh 2>/dev/null'
         subprocess.check_output(self.ip_neigh_cmd, shell=True)
         self.mac_db = MacAddrDb(mac_tbl_dir)
 

@@ -1,1 +1,39 @@
 __pycache__
+
+# Docker-related (contains secrets and runtime data)
+config/
+cache/
+ssh/
+influxdb/
+grafana/
+.env
+setup-docker-env.sh
+
+# Keep directory structure
+!config/.gitkeep
+!cache/.gitkeep
+!ssh/.gitkeep
+!influxdb/.gitkeep
+!grafana/.gitkeep
+
+# Python
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist/
+build/
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

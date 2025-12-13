@@ -8,8 +8,10 @@ from datetime import datetime, timedelta
 import re
 from influxdb import InfluxDBClient
 
-INFLUXDB_HOST = 'localhost'
-INFLUXDB_PORT = 8086
+INFLUXDB_HOST = os.environ.get('INFLUXDB_HOST', 'influxdb')
+INFLUXDB_PORT = int(os.environ.get('INFLUXDB_PORT', '8086'))
+INFLUXDB_USER = os.environ.get('INFLUXDB_USER', 'hubitat')
+INFLUXDB_PASSWORD = os.environ.get('INFLUXDB_PASSWORD', '')
 DB_NAME = 'Hubitat'
 IGNORE_COLS = ['hubId', 'hubName', 'locationId', 'locationName', 'groupId', 'groupName']
 TIME_ATTR = 'time'
@@ -54,11 +56,25 @@ def write_csv(csv_fname, row_data, cols = None):
     print(f'Wrote {csv_fname}')
 
 class SensorDbClient:
-    def __init__(self, cred_file):
-        with open(cred_file, 'r') as f:
-            lines = f.readlines()
-        user, passwd = lines[0].strip(), lines[1].strip()
-        self.client = InfluxDBClient(INFLUXDB_HOST, INFLUXDB_PORT, user, passwd, DB_NAME)
+    def __init__(self, host=None, port=None, username=None, password=None):
+        """
+        Initialize InfluxDB client. Uses environment variables if parameters not provided.
+
+        Args:
+            host: InfluxDB host (default: from INFLUXDB_HOST env or 'influxdb')
+            port: InfluxDB port (default: from INFLUXDB_PORT env or 8086)
+            username: InfluxDB username (default: from INFLUXDB_USER env)
+            password: InfluxDB password (default: from INFLUXDB_PASSWORD env)
+        """
+        host = host or INFLUXDB_HOST
+        port = port or INFLUXDB_PORT
+        username = username or INFLUXDB_USER
+        password = password or INFLUXDB_PASSWORD
+
+        if not username or not password:
+            raise ValueError("InfluxDB credentials not provided. Set INFLUXDB_USER and INFLUXDB_PASSWORD environment variables.")
+
+        self.client = InfluxDBClient(host, port, username, password, DB_NAME)
 
     def query_raw_sql(self, query):
         return self.client.query(query).get_points()
@@ -156,7 +172,10 @@ class SensorHist:
 
 def main():
     parser = argparse.ArgumentParser(description='Hubitat Sensor Influx Database Client')
-    parser.add_argument('--creds', type=str, required=True, help='Path to credentials file')
+    parser.add_argument('--host', type=str, default=None, help='InfluxDB host (default: from INFLUXDB_HOST env)')
+    parser.add_argument('--port', type=int, default=None, help='InfluxDB port (default: from INFLUXDB_PORT env)')
+    parser.add_argument('--user', type=str, default=None, help='InfluxDB username (default: from INFLUXDB_USER env)')
+    parser.add_argument('--password', type=str, default=None, help='InfluxDB password (default: from INFLUXDB_PASSWORD env)')
     parser.add_argument('--meas', type=str, default=None, help='Measurement to query (table name)')
     parser.add_argument('--rev', action='store_true', help='Display results in reverse cron order')
     parser.add_argument('--dev', type=str, default='.*', help='Device name to filter by')
@@ -174,7 +193,7 @@ def main():
         except ValueError:
             raise ValueError(f'Invalid date format: {ts_str}')
 
-    client = SensorDbClient(args.creds)
+    client = SensorDbClient(host=args.host, port=args.port, username=args.user, password=args.password)
     all_meas = client.ls_measurements()
     if args.meas not in all_meas:
         raise RuntimeError(f'--meas invalid or unspecified. Choose from: {",".join(all_meas)}')
