@@ -8,6 +8,8 @@ import random
 import requests
 from lanmon import LanMonitor
 
+# pylint: disable=C0113,C0114,C0115,C0116,C0103
+
 class Worker:
     def __init__(self, dev, hub_xact_fn):
         self.dev = dev
@@ -20,8 +22,8 @@ class Worker:
         if time_now > self._next_run_time:
             self.work()
             self._next_run_time = time_now + self.dev['poll-interval']
-            logging.debug(f'{self.dev["name"]}: {self.dev["worker"]}::work() '
-                          f'finished in {(time.time()-time_now):03f}s')
+            logging.debug('%s: %s::work() finished in %.3fs', self.dev["name"],
+                          self.dev["worker"], (time.time()-time_now))
     def hub_transact(self, *args, **kwargs):
         return self._hub_xact_fn(*args, **kwargs)
 
@@ -38,11 +40,12 @@ class Pinger(Worker):
             if self.ping_proc.poll() is not None:
                 self.ping_proc.communicate()
                 dispatch_ping = True
-                curr_online = (self.ping_proc.returncode == 0)
+                curr_online = self.ping_proc.returncode == 0
                 if self.is_online != curr_online:
                     self.hub_transact('dev_cmd', dev_id=self.dev['id'],
                         cmd=('arrived' if curr_online else 'departed'))
-                    logging.info(f'{self.dev["name"]}: Online status changed to {curr_online}')
+                    logging.info('%s: Online status changed to %s',
+                                 self.dev["name"], curr_online)
                 self.is_online = curr_online
         else:
             dispatch_ping = True
@@ -62,11 +65,13 @@ class InternetChecker(Worker):
             if self.curl_proc.poll() is not None:
                 pout = self.curl_proc.communicate()[0].decode('utf-8')
                 dispatch_curl = True
-                curr_online = (self.curl_proc.returncode == 0 and 'OK' in pout.split('\n')[0])
+                curr_online = (
+                    self.curl_proc.returncode == 0 and 'OK' in pout.split('\n', maxsplit=1)[0]
+                )
                 if self.is_online != curr_online:
                     self.hub_transact('dev_cmd', dev_id=self.dev['id'],
                         cmd=('arrived' if curr_online else 'departed'))
-                    logging.info(f'{self.dev["name"]}: Online status changed to {curr_online}')
+                    logging.info('%s: Online status changed to %s', self.dev["name"], curr_online)
                 self.is_online = curr_online
         else:
             dispatch_curl = True
@@ -90,26 +95,27 @@ class LanMonReader(Worker):
         if self.is_online != curr_online:
             self.hub_transact('dev_cmd', dev_id=self.dev['id'],
                 cmd=('arrived' if curr_online else 'departed'))
-            logging.info(f'{self.dev["name"]}: Online status changed to {curr_online}')
+            logging.info('%s: Online status changed to %s',
+                         self.dev["name"], curr_online)
         self.is_online = curr_online
 
 class EventDaemon:
     def __init__(self, cfg_file, poll_interval):
         CFG_FILE_VER = 1
         self.poll_interval = poll_interval
-        with open(cfg_file) as json_f:
+        with open(cfg_file, encoding='utf-8') as json_f:
             print(cfg_file)
             cfg_blob = json.load(json_f)
             print(cfg_blob)
             if cfg_blob['version'] != CFG_FILE_VER:
-                raise RuntimeError(f'Config file has the wrong version')
+                raise RuntimeError('Config file has the wrong version')
             url_prefix = f'http://{cfg_blob["hubitat-addr"]}/apps/api/{cfg_blob["maker-api"]["id"]}/devices/'
             url_suffix = f'?access_token={cfg_blob["maker-api"]["token"]}'
             self.url_fns = {
                 'ls_dev': lambda: f'{url_prefix}all{url_suffix}',
                 'dev_info': lambda dev_id: f'{url_prefix}{dev_id}{url_suffix}',
                 'dev_cmd': lambda dev_id, cmd: f'{url_prefix}{dev_id}/{cmd}{url_suffix}',
-                'dev_cmd_arg': lambda dev_id, cmd, arg: f'{url_prefix}{dev_id}/{cmd}/{val}{url_suffix}',
+                'dev_cmd_arg': lambda dev_id, cmd, arg: f'{url_prefix}{dev_id}/{cmd}/{arg}{url_suffix}',
             }
             self.avail_devs = {}
             for dev in self.hub_transact('ls_dev'):
@@ -118,23 +124,25 @@ class EventDaemon:
             self.workers = {}
             for dev in cfg_blob["devices"]:
                 dev_id = dev['id']
-                logging.info(f'Adding device {dev["name"]} '
-                             f'(ID={dev_id}, Worker={dev["worker"]}, Args={dev["worker-args"]})')
+                logging.info('Adding device %s (ID=%s, Worker=%s, Args=%s)',
+                             dev["name"], dev_id, dev["worker"], dev["worker-args"])
                 if dev_id not in self.avail_devs:
-                    raise RuntimeError(f'Could not access device through Maker API')
+                    raise RuntimeError('Could not access device through Maker API')
                 if dev["poll-interval"] < poll_interval:
-                    raise RuntimeError(f'Poll interval of device is less than that of the daemon')
-                self.workers[dev_id] = globals()[dev['worker']](dev, self.hub_transact, self.worker_ifaces)
+                    raise RuntimeError('Poll interval of device is less than that of the daemon')
+                self.workers[dev_id] = globals()[dev['worker']](
+                    dev, self.hub_transact, self.worker_ifaces
+                )
 
     def hub_transact(self, op, **kwargs):
         url = self.url_fns[op](**kwargs)
-        response = requests.get(url)
+        response = requests.get(url, timeout=5)
         return response.json()
 
     def run(self):
         while True:
             try:
-                for dev_id, worker in self.workers.items():
+                for worker in self.workers.values():
                     worker.work_if_due()
                 time.sleep(self.poll_interval)
             except KeyboardInterrupt:

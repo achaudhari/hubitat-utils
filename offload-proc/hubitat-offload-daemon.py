@@ -5,62 +5,91 @@ import time
 import datetime
 import logging
 import argparse
-import tempfile
-import requests
 import pickle
 import hashlib
 import hmac
+import requests
 
 from waitress import serve
-from werkzeug.wrappers import Request, Response
-from jsonrpc import JSONRPCResponseManager, dispatcher
+from werkzeug.wrappers import Request, Response  # type: ignore
+from jsonrpc import JSONRPCResponseManager, dispatcher  # type: ignore
 from common import EmailUtils
 from reportgen import HistoryReportGen, NetworkReportGen
 # from webshot_ffox import WebScreenshotFirefox
 
+# pylint: disable=C0113,C0114,C0115,C0116,C0103
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 CFG_DIR = '/etc/hauto'
 CACHE_DIR = '/var/hauto'
-RPC_PORT = 4226
 
+HUBITAT_SECRET_SALT = 'obedient-unbent-scant'
+HUBITAT_SECRET_FILE = os.path.join(CFG_DIR, 'hubitat-secret.txt')
+SYS_MGMT_SECRET_FILE = os.path.join(CFG_DIR, 'sysmgmtd-secret.txt')
+RPC_PORT = 4226
 SYS_MGMT_PORT = 4227
-SYS_MGMT_SECRET_FILE = '/etc/hauto/sysmgmtd-secret.txt'
+
+
+def read_secret_file(secret_file: str):
+    if not os.path.isfile(secret_file):
+        raise FileNotFoundError(f'Secret file not found: {secret_file}')
+    with open(secret_file, 'r', encoding='utf-8') as f:
+        secret = f.read().strip()
+    if not secret:
+        raise FileNotFoundError(f'Secret file is empty: {secret_file}')
+    return secret
+
+def hub_authenticate(cookie):
+    try:
+        secret = read_secret_file(HUBITAT_SECRET_FILE)
+        token = hmac.new(
+            secret.encode(), HUBITAT_SECRET_SALT.encode(), hashlib.sha256
+        ).hexdigest()
+        if not hmac.compare_digest(token, cookie):
+            raise PermissionError('Secret validation failed. Permission denied.')
+    except Exception as ex:
+        raise PermissionError('Secret validation failed. Unknown error.') from ex
+
+def send_sys_mgmt_cmd(action):
+    """Send authenticated request to power-mgmt service"""
+    # Read secret from file
+    secret = read_secret_file(SYS_MGMT_SECRET_FILE)
+
+    # Generate HMAC token for the endpoint
+    endpoint = f'/{action}'
+    token = hmac.new(secret.encode(), endpoint.encode(), hashlib.sha256).hexdigest()
+
+    # Send request to power-mgmt container via host network
+    host_ip = os.environ.get('HOST_IP_ADDR')
+    if not host_ip:
+        raise PermissionError('HOST_IP_ADDR environment variable not set.')
+
+    url = f'http://{host_ip}:{SYS_MGMT_PORT}{endpoint}'
+    headers = {'Authorization': f'Bearer {token}'}
+
+    response = requests.post(url, headers=headers, timeout=5)
+    response.raise_for_status()
+    return response.json()
+
 
 
 def rpc_email_text(email_addr, subject, email_body):
     email_body = email_body.replace('\n', '<br>').replace('\t', '&emsp;')
-    logging.info(f'rpc_email_text(email_addr={email_addr}, subject={subject}, '
-        f'email_body={email_body})')
+    logging.info('rpc_email_text(email_addr=%s, subject=%s, email_body=%s)',
+                 email_addr, subject, email_body)
     EmailUtils.send_email_text(email_addr, subject, email_body)
     logging.info('rpc_email_text: Finished successfully')
 
-def rpc_email_web_snapshot(email_addr, subject, page_url, load_delay):
-    logging.info(f'rpc_email_web_snapshot(email_addr={email_addr}, subject={subject}, '
-        f'page_url={page_url}, load_delay={load_delay})')
-    raise NotImplementedError('Operation DEPRECATED')
-    # # Open headless firefox and resize window
-    # logging.info('rpc_email_web_snapshot: Starting browser...')
-    # webshot = WebScreenshotFirefox()
-    # # Load URL and save screenshot
-    # logging.info('rpc_email_web_snapshot: Loading page and saving screenshot...')
-    # dashboard_img_path = tempfile.mktemp(suffix='.png')
-    # webshot.take(page_url, dashboard_img_path, load_delay, 900)
-    # # Create email and send
-    # logging.info('rpc_email_web_snapshot: Sending email...')
-    # EmailUtils.send_email_image(email_addr, subject, dashboard_img_path)
-    # os.unlink(dashboard_img_path)
-    # logging.info('rpc_email_web_snapshot: Finished successfully')
-
 def rpc_email_history_report(email_addr, duration_hr):
-    logging.info(f'rpc_email_history_report(email_addr={email_addr}, duration_hr={duration_hr})')
+    logging.info('rpc_email_history_report(email_addr=%s, duration_hr=%s)',
+                 email_addr, duration_hr)
     t_stop = datetime.datetime.now()
     t_strt = t_stop - datetime.timedelta(hours=duration_hr)
     rgen = HistoryReportGen(os.path.join(CFG_DIR, 'history-report.json'))
     rgen.send_email(t_strt, t_stop, email_addr)
 
 def rpc_email_network_report(email_addr, verbosity):
-    logging.info(f'rpc_email_network_report()')
+    logging.info('rpc_email_network_report()')
     with open(os.path.join(CACHE_DIR, 'lanmon_clients.pickle'), 'rb') as handle:
         lanmon_blob = pickle.load(handle)
     rgen = NetworkReportGen(lanmon_blob['clients'], verbosity)
@@ -75,14 +104,14 @@ class RoombaUtils:
 
     @staticmethod
     def get_full_state():
-        response = requests.get(RoombaUtils.STATE_URL)
+        response = requests.get(RoombaUtils.STATE_URL, timeout=5)
         return response.json()
 
     @staticmethod
     def get_reduced_state():
         full = RoombaUtils.get_full_state()
         if full['state'] is None:
-            raise IOError(f'Empty state. Roomba might be offline.')
+            raise IOError('Empty state. Roomba might be offline.')
         reported = full['state']['reported']
         pretty_state = {
             'name': reported['name'],
@@ -103,7 +132,9 @@ class RoombaUtils:
                 48 : 'Path Blocked',
             }[reported['cleanMissionStatus']['notReady']]
         except KeyError:
-            pretty_state['ready_msg'] = f"Ready: Unknown{reported['cleanMissionStatus']['notReady']}"
+            pretty_state['ready_msg'] = (
+                f"Ready: Unknown{reported['cleanMissionStatus']['notReady']}"
+            )
         try:
             pretty_state['error_msg'] = 'Status: ' + {
                 0  : 'Okay',
@@ -114,7 +145,8 @@ class RoombaUtils:
             pretty_state['error_msg'] = f"Status: Unknown{reported['cleanMissionStatus']['error']}"
         if reported['cleanMissionStatus']['phase'] == 'charge' and reported['batPct'] == 100:
             pretty_state['phase'] = 'Roomba Idle'
-        elif reported['cleanMissionStatus']['cycle'] == 'none' and reported['cleanMissionStatus']['phase'] == 'stop':
+        elif (reported['cleanMissionStatus']['cycle'] == 'none' and
+              reported['cleanMissionStatus']['phase'] == 'stop'):
             pretty_state['phase'] = 'Roomba Stopped'
         else:
             try:
@@ -142,12 +174,12 @@ class RoombaUtils:
     def send_cmd(action):
         ALL_ACTIONS = ['start', 'stop', 'pause', 'resume', 'dock', 'reset', 'locate']
         if action in ALL_ACTIONS:
-            response = requests.get(RoombaUtils.ACTION_URL_BASE + action)
+            requests.get(RoombaUtils.ACTION_URL_BASE + action, timeout=5)
         else:
             raise ValueError(f'Invalid action={action}. Must be {" ".join(ALL_ACTIONS)}')
 
 def rpc_roomba_get_state(what):
-    logging.info(f'rpc_roomba_get_state(what={what})')
+    logging.info('rpc_roomba_get_state(what=%s)', what)
     if what == 'full':
         return RoombaUtils.get_full_state()
     elif what == 'reduced':
@@ -156,7 +188,7 @@ def rpc_roomba_get_state(what):
         raise ValueError(f'Invalid what={what}. Must be full/reduced.')
 
 def rpc_roomba_send_cmd(action):
-    logging.info(f'rpc_roomba_send_cmd(action={action})')
+    logging.info('rpc_roomba_send_cmd(action=%s)', action)
     RoombaUtils.send_cmd(action)
 
 # ---------------------------------------
@@ -164,83 +196,42 @@ def rpc_roomba_send_cmd(action):
 # ---------------------------------------
 
 def rpc_echo(data):
-    logging.info(f'rpc_echo(data={data})')
+    logging.info('rpc_echo(data=%s)', data)
     return data
 
 def rpc_check_health():
-    logging.info(f'rpc_check_health()')
+    logging.info('rpc_check_health()')
     result = send_sys_mgmt_cmd('health')
     if 'status' in result and result['status'] == 'ok':
         health = result['health']
-        logging.info(f'rpc_check_health: {health}')
+        logging.info('rpc_check_health: %s', health)
         return health
     else:
-        logging.error(f'rpc_check_health: Error {result["error"]}')
+        logging.error('rpc_check_health: Error %s', result.get('error'))
 
 def rpc_sleep(duration_s):
-    logging.info(f'rpc_sleep(duration_s={duration_s})')
+    logging.info('rpc_sleep(duration_s=%s)', duration_s)
     time.sleep(duration_s)
     return 0
 
-def hub_authenticate(cookie):
-    shared_sec = os.environ.get('HUBITAT_SECRET')
-    if not shared_sec:
-        raise PermissionError('HUBITAT_SECRET environment variable not set. Permission denied.')
-    resp_lcl = os.environ.get('ETH_IFACE_MAC')
-    if not shared_sec:
-        raise PermissionError('ETH_IFACE_MAC environment variable not set. Permission denied.')
-
-    # Cookie is the MAC address encrypted using:
-    # $ cat /sys/class/net/wan/address | cut -c -18 | openssl enc -e -des3 -base64 -pass pass:${shared_sec} -pbkdf2
-    try:
-        resp_rem = subprocess.check_output(
-            f'echo "{cookie}" | openssl enc -d -des3 -base64 -pass pass:{shared_sec} -pbkdf2',
-            shell=True).strip().decode('utf-8')
-    except:
-        raise PermissionError('Secret validation failed. Permission denied.')
-    if resp_rem != resp_lcl:
-        raise PermissionError('Secret validation failed. Permission denied.')
-
-def send_sys_mgmt_cmd(action):
-    """Send authenticated request to power-mgmt service"""
-    # Read secret from file
-    if not os.path.isfile(SYS_MGMT_SECRET_FILE):
-        raise FileNotFoundError(f'Secret file not found: {SYS_MGMT_SECRET_FILE}')
-    with open(SYS_MGMT_SECRET_FILE, 'r', encoding='utf-8') as f:
-        secret = f.read().strip()
-    if not secret:
-        raise FileNotFoundError(f'Secret file is empty: {SYS_MGMT_SECRET_FILE}')
-
-    # Generate HMAC token for the endpoint
-    endpoint = f'/{action}'
-    token = hmac.new(secret.encode(), endpoint.encode(), hashlib.sha256).hexdigest()
-
-    # Send request to power-mgmt container via host network
-    url = f'http://192.168.1.253:{SYS_MGMT_PORT}{endpoint}'
-    headers = {'Authorization': f'Bearer {token}'}
-
-    response = requests.post(url, headers=headers, timeout=5)
-    response.raise_for_status()
-    return response.json()
-
 def rpc_reboot_sys(cookie):
-    logging.info(f'rpc_reboot_sys(cookie={cookie})')
+    logging.info('rpc_reboot_sys(cookie=%s)', cookie)
     hub_authenticate(cookie)
-    logging.info('rpc_reboot_sys: Permission granted. Sending reboot command to power-mgmt...')
+    logging.info('rpc_reboot_sys: Permission granted. Sending reboot command to sysmgmtd...')
     result = send_sys_mgmt_cmd('reboot')
-    logging.info(f'rpc_reboot_sys: {result}')
+    logging.info('rpc_reboot_sys: %s', result)
     return cookie
 
 def rpc_shutdown_sys(cookie):
-    logging.info(f'rpc_shutdown_sys(cookie={cookie})')
+    logging.info('rpc_shutdown_sys(cookie=%s)', cookie)
     hub_authenticate(cookie)
-    logging.info('rpc_shutdown_sys: Permission granted. Sending shutdown command to power-mgmt...')
+    logging.info('rpc_shutdown_sys: Permission granted. Sending reboot command to sysmgmtd...')
     result = send_sys_mgmt_cmd('shutdown')
-    logging.info(f'rpc_shutdown_sys: {result}')
+    logging.info('rpc_shutdown_sys: %s', result)
     return cookie
 
 def rpc_hub_safe_shutdown(cookie):
-    logging.info(f'rpc_hub_safe_shutdown(cookie={cookie})')
+    logging.info('rpc_hub_safe_shutdown(cookie=%s)', cookie)
     hub_authenticate(cookie)
     logging.info('rpc_hub_safe_shutdown: Permission granted. Shutting down hub and system...')
     os.system(f'bash {os.path.join(SCRIPT_DIR, "hubitat-admin-ctrl.sh")} shutdown')
@@ -257,7 +248,6 @@ def application(request):
     dispatcher["echo"] = rpc_echo
     dispatcher["sleep"] = rpc_sleep
     dispatcher["check_health"] = rpc_check_health
-    dispatcher["email_web_snapshot"] = rpc_email_web_snapshot
     dispatcher["email_history_report"] = rpc_email_history_report
     dispatcher["email_text"] = rpc_email_text
     dispatcher["roomba_get_state"] = rpc_roomba_get_state
@@ -273,10 +263,14 @@ def application(request):
 
 def main():
     parser = argparse.ArgumentParser(description='Hubitat Offload Daemon')
-    parser.add_argument('--rpc-addr', type=str, default='0.0.0.0', help='IP address to bing server to')
-    parser.add_argument('--rpc-port', type=int, default=RPC_PORT, help='TCP port to listen on')
-    parser.add_argument('--processes', type=int, default=3, help='Max number of processes')
-    parser.add_argument('--verbose', action='store_true', help='Verbose output')
+    parser.add_argument('--rpc-addr', type=str, default='0.0.0.0',
+                        help='IP address to bing server to')
+    parser.add_argument('--rpc-port', type=int, default=RPC_PORT,
+                        help='TCP port to listen on')
+    parser.add_argument('--processes', type=int, default=3,
+                        help='Max number of processes')
+    parser.add_argument('--verbose', action='store_true',
+                        help='Verbose output')
     args = parser.parse_args()
 
     log_level = logging.DEBUG if args.verbose else logging.INFO

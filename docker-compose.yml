@@ -110,8 +110,7 @@ services:
       - TZ=America/Los_Angeles
       - PYTHONUNBUFFERED=1
       - SERVICE_NAME=offload
-      - HUBITAT_SECRET=${HUBITAT_SECRET}
-      - ETH_IFACE_MAC=${ETH_IFACE_MAC}
+      - HOST_IP_ADDR=${HOST_IP_ADDR}
       - INFLUXDB_HOST=influxdb
       - INFLUXDB_PORT=8086
       - INFLUXDB_USER=${INFLUXDB_USER}
