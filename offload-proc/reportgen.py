@@ -6,7 +6,6 @@ import json
 import argparse
 # import tempfile
 from datetime import datetime
-import subprocess
 
 import dominate
 from dominate.tags import *
@@ -148,7 +147,7 @@ class NetworkReportGen:
         self.curr_clients = clients
         self.verbosity = verbosity
 
-    def send_email(self, email_addr):
+    def send_email(self, email_addr, dnsleak_out=None, speedtest_out=None):
         logging.info('NetworkReportGen: Generating network report HTML...')
         report_time = datetime.now()
         title = 'Network Report'
@@ -177,18 +176,14 @@ class NetworkReportGen:
                     with tr():
                         for tcell in trow:
                             td(tcell)
-            if self.verbosity in ['full']:
-                logging.info('NetworkReportGen: Running DNS leak test...')
-                dnsleak_out = subprocess.check_output('dnsleaktest.sh', shell=True).strip().decode('utf-8')
+            if self.verbosity in ['full'] and dnsleak_out is not None:
                 with h3():
                     u('DNS Leak Test Report')
                 with pre():
                     for line in dnsleak_out.split('\n'):
                         text(line)
                         br()
-            if self.verbosity in ['full']:
-                logging.info('NetworkReportGen: Running internet speed test...')
-                speedtest_out = subprocess.check_output('speedtest --accept-license', shell=True).strip().decode('utf-8')
+            if self.verbosity in ['full'] and speedtest_out is not None:
                 with h3():
                     u('Internet Speed Test Report')
                 with pre():

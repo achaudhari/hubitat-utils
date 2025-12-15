@@ -72,6 +72,13 @@ class HAutoSysMgmtDaemon(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(json.dumps(data).encode())
 
+    def do_GET(self):
+        """Handle GET health check"""
+        if self.path == '/health':
+            self.send_json_response(200, {'status': 'ok', 'service': 'sysmgmtd'})
+        else:
+            self.send_json_response(404, {'error': 'Not found'})
+
     def do_POST(self):
         """Handle POST requests"""
         if not self._secret:
@@ -85,64 +92,88 @@ class HAutoSysMgmtDaemon(BaseHTTPRequestHandler):
             return
 
         if self.path == '/reboot':
-            logging.info('Received reboot command - executing in 3 seconds')
-            subprocess.Popen(['sh', '-c', 'sleep 3 && sudo /sbin/reboot'])
-            self.send_json_response(200, {'status': 'ok', 'action': 'reboot'})
-
+            self.handle_reboot()
         elif self.path == '/shutdown':
-            logging.info('Received shutdown command - executing in 3 seconds')
-            subprocess.Popen(['sh', '-c', 'sleep 3 && sudo /sbin/poweroff'])
-            self.send_json_response(200, {'status': 'ok', 'action': 'shutdown'})
-
+            self.handle_shutdown()
         elif self.path == '/health':
+            self.handle_health()
+        elif self.path == '/speedtest':
+            self.handle_speedtest()
+        elif self.path == '/dnsleaktest':
+            self.handle_dnsleaktest()
+        else:
+            self.send_json_response(404, {'error': 'Not found'})
+
+    def handle_reboot(self):
+        logging.info('Received reboot command - executing in 3 seconds')
+        subprocess.Popen(['sh', '-c', 'sleep 3 && sudo /sbin/reboot'])
+        self.send_json_response(200, {'status': 'ok', 'action': 'reboot'})
+
+    def handle_shutdown(self):
+        logging.info('Received shutdown command - executing in 3 seconds')
+        subprocess.Popen(['sh', '-c', 'sleep 3 && sudo /sbin/poweroff'])
+        self.send_json_response(200, {'status': 'ok', 'action': 'shutdown'})
+
+    def handle_health(self):
+        fail_cnt = 0
+        health = {}
+        # Map service names to container names and expected status
+        service_checks = {
+            'hubitat-offload': {'container': 'hubitat-offload', 'expected_status': 'running'},
+            'hubitat-event': {'container': 'hubitat-event', 'expected_status': 'running'},
+            'influxdb': {'container': 'influxdb', 'expected_status': 'running'},
+            'grafana': {'container': 'grafana', 'expected_status': 'running'},
+            'caddy': {'container': 'caddy', 'expected_status': 'running'},
+            'cloudflared': {'container': 'grafana', 'expected_status': 'running'},
+        }
+        try:
+            # Connect to Docker daemon via socket
             fail_cnt = 0
-            health = {}
-
-            # Map service names to container names and expected status
-            service_checks = {
-                'hubitat-offload': {'container': 'hubitat-offload', 'expected_status': 'running'},
-                'hubitat-event': {'container': 'hubitat-event', 'expected_status': 'running'},
-                'influxdb': {'container': 'influxdb', 'expected_status': 'running'},
-                'grafana': {'container': 'grafana', 'expected_status': 'running'},
-                'caddy': {'container': 'caddy', 'expected_status': 'running'},
-                'cloudflared': {'container': 'grafana', 'expected_status': 'running'},
-            }
-            try:
-                # Connect to Docker daemon via socket
-                fail_cnt = 0
-                client = docker.DockerClient(base_url='unix://var/run/docker.sock')
-                for svc_name, check_info in service_checks.items():
-                    try:
-                        # Get container by name and check its status
-                        container = client.containers.get(check_info['container'])
-                        status = container.status
-
-                        if status == check_info['expected_status']:
-                            health[svc_name] = 'OKAY'
-                        else:
-                            health[svc_name] = f'UNEXPECTED:{status}'
-                            fail_cnt += 1
-                    except docker.errors.NotFound:
+            client = docker.DockerClient(base_url='unix://var/run/docker.sock')
+            for svc_name, check_info in service_checks.items():
+                try:
+                    # Get container by name and check its status
+                    container = client.containers.get(check_info['container'])
+                    status = container.status
+                    if status == check_info['expected_status']:
+                        health[svc_name] = 'OKAY'
+                    else:
+                        health[svc_name] = f'UNEXPECTED:{status}'
                         fail_cnt += 1
-                        health[svc_name] = 'NOT_FOUND'
-                    except Exception as e:  # pylint: disable=broad-exception-caught
-                        fail_cnt += 1
-                        health[svc_name] = f'ERROR:{str(e)}'
-                client.close()
-                health['overall'] = 'DEGRADED' if fail_cnt else 'OKAY'
-                self.send_json_response(200, {'status': 'ok', 'action': 'health',
-                                              'health': health})
-            except Exception as e:  # pylint: disable=broad-exception-caught
-                self.send_json_response(500, {'error': 'Docker client failed' + str(e)})
-        else:
-            self.send_json_response(404, {'error': 'Not found'})
+                except docker.errors.NotFoundException:
+                    fail_cnt += 1
+                    health[svc_name] = 'NOT_FOUND'
+                except Exception as e:  # pylint: disable=broad-exception-caught
+                    fail_cnt += 1
+                    health[svc_name] = f'ERROR:{str(e)}'
+            client.close()
+            health['overall'] = 'DEGRADED' if fail_cnt else 'OKAY'
+            self.send_json_response(200, {'status': 'ok', 'action': 'health',
+                                          'health': health})
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            self.send_json_response(500, {'error': 'Docker client failed' + str(e)})
 
-    def do_GET(self):
-        """Handle GET health check"""
-        if self.path == '/health':
-            self.send_json_response(200, {'status': 'ok', 'service': 'power-mgmt'})
-        else:
-            self.send_json_response(404, {'error': 'Not found'})
+    def handle_speedtest(self):
+        logging.info('Running speedtest...')
+        try:
+            cmd_out = subprocess.check_output(
+                'speedtest', shell=True
+            ).strip().decode('utf-8')
+            self.send_json_response(
+                200, {'status': 'ok', 'action': 'speedtest', 'output': cmd_out})
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            self.send_json_response(500, {'error': 'Speedtest failed' + str(e)})
+
+    def handle_dnsleaktest(self):
+        logging.info('Running dnsleaktest.sh...')
+        try:
+            cmd_out = subprocess.check_output(
+                'dnsleaktest.sh', shell=True
+            ).strip().decode('utf-8')
+            self.send_json_response(
+                200, {'status': 'ok', 'action': 'dnsleaktest', 'output': cmd_out})
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            self.send_json_response(500, {'error': 'DNS Leak Test failed' + str(e)})
 
 
 def main():
@@ -173,7 +204,6 @@ def main():
     httpd = HTTPServer((args.listen_addr, args.listen_port), handler)
     logging.info('Home Automation System Management Daemon listening on port %s:%d',
                  args.listen_addr, args.listen_port)
-    logging.info('Supported endpoints: POST /reboot, POST /shutdown, GET /health')
     httpd.serve_forever()
 
 if __name__ == '__main__':

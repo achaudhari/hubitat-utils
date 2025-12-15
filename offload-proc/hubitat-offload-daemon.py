@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import os
-import subprocess
 import time
 import datetime
 import logging
@@ -50,7 +49,7 @@ def hub_authenticate(cookie):
     except Exception as ex:
         raise PermissionError('Secret validation failed. Unknown error.') from ex
 
-def send_sys_mgmt_cmd(action):
+def send_sys_mgmt_cmd(action, timeout=5):
     """Send authenticated request to power-mgmt service"""
     # Read secret from file
     secret = read_secret_file(SYS_MGMT_SECRET_FILE)
@@ -67,7 +66,7 @@ def send_sys_mgmt_cmd(action):
     url = f'http://{host_ip}:{SYS_MGMT_PORT}{endpoint}'
     headers = {'Authorization': f'Bearer {token}'}
 
-    response = requests.post(url, headers=headers, timeout=5)
+    response = requests.post(url, headers=headers, timeout=timeout)
     response.raise_for_status()
     return response.json()
 
@@ -92,8 +91,16 @@ def rpc_email_network_report(email_addr, verbosity):
     logging.info('rpc_email_network_report()')
     with open(os.path.join(CACHE_DIR, 'lanmon_clients.pickle'), 'rb') as handle:
         lanmon_blob = pickle.load(handle)
+
+    test_results = {'speedtest': None, 'dnsleaktest': None}
+    for test in test_results:
+        logging.info('rpc_email_network_report: Running %s', test)
+        result = send_sys_mgmt_cmd(test, timeout=60)
+        if 'status' in result and result['status'] == 'ok':
+            test_results[test] = result['output']
+
     rgen = NetworkReportGen(lanmon_blob['clients'], verbosity)
-    rgen.send_email(email_addr)
+    rgen.send_email(email_addr, test_results['speedtest'], test_results['dnsleaktest'])
 
 # ---------------------------------------
 #   Roomba Utilities
@@ -230,14 +237,14 @@ def rpc_shutdown_sys(cookie):
     logging.info('rpc_shutdown_sys: %s', result)
     return cookie
 
-def rpc_hub_safe_shutdown(cookie):
-    logging.info('rpc_hub_safe_shutdown(cookie=%s)', cookie)
-    hub_authenticate(cookie)
-    logging.info('rpc_hub_safe_shutdown: Permission granted. Shutting down hub and system...')
-    os.system(f'bash {os.path.join(SCRIPT_DIR, "hubitat-admin-ctrl.sh")} shutdown')
-    time.sleep(10.0)
-    subprocess.Popen(['sleep 3; sudo /sbin/shutdown -h now'], shell=True) # Nonblocking
-    return cookie
+# def rpc_hub_safe_shutdown(cookie):
+#     logging.info('rpc_hub_safe_shutdown(cookie=%s)', cookie)
+#     hub_authenticate(cookie)
+#     logging.info('rpc_hub_safe_shutdown: Permission granted. Shutting down hub and system...')
+#     os.system(f'bash {os.path.join(SCRIPT_DIR, "hubitat-admin-ctrl.sh")} shutdown')
+#     time.sleep(10.0)
+#     subprocess.Popen(['sleep 3; sudo /sbin/shutdown -h now'], shell=True) # Nonblocking
+#     return cookie
 
 # ---------------------------------------
 #   Main application
@@ -248,14 +255,14 @@ def application(request):
     dispatcher["echo"] = rpc_echo
     dispatcher["sleep"] = rpc_sleep
     dispatcher["check_health"] = rpc_check_health
-    dispatcher["email_history_report"] = rpc_email_history_report
     dispatcher["email_text"] = rpc_email_text
-    dispatcher["roomba_get_state"] = rpc_roomba_get_state
-    dispatcher["roomba_send_cmd"] = rpc_roomba_send_cmd
+    dispatcher["email_history_report"] = rpc_email_history_report
+    dispatcher["email_network_report"] = rpc_email_network_report
     dispatcher["reboot"] = rpc_reboot_sys
     dispatcher["shutdown"] = rpc_shutdown_sys
-    dispatcher["hub_safe_shutdown"] = rpc_hub_safe_shutdown
-    dispatcher["email_network_report"] = rpc_email_network_report
+    dispatcher["roomba_get_state"] = rpc_roomba_get_state
+    dispatcher["roomba_send_cmd"] = rpc_roomba_send_cmd
+    # dispatcher["hub_safe_shutdown"] = rpc_hub_safe_shutdown
 
     response = JSONRPCResponseManager.handle(
         request.data, dispatcher)
