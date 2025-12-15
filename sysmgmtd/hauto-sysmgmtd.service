@@ -1,0 +1,14 @@
+[Unit]
+Description=Home Automation System Management Daemon
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/env python3 /srv/hubitat-utils/sysmgmtd/sysmgmtd.py --secret-file /srv/hubitat-utils/config/sysmgmtd-secret.txt --listen-port 4227
+Restart=on-failure
+User=admin
+Group=admin
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

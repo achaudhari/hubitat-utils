@@ -24,21 +24,9 @@ CFG_DIR = '/etc/hauto'
 CACHE_DIR = '/var/hauto'
 RPC_PORT = 4226
 
-def get_host_ip_addr(wait_for_network = True, timeout = 30):
-    cmd = "hostname -i | awk '{print $1}'"
-    get_ip = lambda: subprocess.check_output(cmd, shell=True).strip().decode('utf-8')
-    is_lo_addr = lambda ip: ip.split('.')[0] == '127'
-    ip = get_ip()
-    elapsed = 0
-    # Retry command until loopback interface addr disappears
-    while wait_for_network and is_lo_addr(ip):
-        if elapsed >= timeout:
-            break
-        elapsed += 1
-        time.sleep(1.0)
-        print('WARNING: Network is initializing. Retrying host IP...')
-        ip = get_ip()
-    return ip
+SYS_MGMT_PORT = 4227
+SYS_MGMT_SECRET_FILE = '/etc/hauto/sysmgmtd-secret.txt'
+
 
 def rpc_email_text(email_addr, subject, email_body):
     email_body = email_body.replace('\n', '<br>').replace('\t', '&emsp;')
@@ -181,17 +169,13 @@ def rpc_echo(data):
 
 def rpc_check_health():
     logging.info(f'rpc_check_health()')
-    fail_cnt = 0
-    health = {}
-    for svc in ['hubitat-offload', 'hubitat-event', 'roomba-svr']:
-        try:
-            subprocess.check_output(f'systemctl status {svc}', shell=True, stderr=subprocess.STDOUT)
-            health[svc] = 'OKAY'
-        except subprocess.CalledProcessError:
-            fail_cnt += 1
-            health[svc] = 'FAILED'
-    health['overall'] = 'DEGRADED' if fail_cnt else 'OKAY'
-    return health
+    result = send_sys_mgmt_cmd('health')
+    if 'status' in result and result['status'] == 'ok':
+        health = result['health']
+        logging.info(f'rpc_check_health: {health}')
+        return health
+    else:
+        logging.error(f'rpc_check_health: Error {result["error"]}')
 
 def rpc_sleep(duration_s):
     logging.info(f'rpc_sleep(duration_s={duration_s})')
@@ -217,18 +201,22 @@ def hub_authenticate(cookie):
     if resp_rem != resp_lcl:
         raise PermissionError('Secret validation failed. Permission denied.')
 
-def send_power_mgmt_cmd(action):
+def send_sys_mgmt_cmd(action):
     """Send authenticated request to power-mgmt service"""
-    secret = os.environ.get('HUBITAT_SECRET')
+    # Read secret from file
+    if not os.path.isfile(SYS_MGMT_SECRET_FILE):
+        raise FileNotFoundError(f'Secret file not found: {SYS_MGMT_SECRET_FILE}')
+    with open(SYS_MGMT_SECRET_FILE, 'r', encoding='utf-8') as f:
+        secret = f.read().strip()
     if not secret:
-        raise PermissionError('HUBITAT_SECRET not set')
+        raise FileNotFoundError(f'Secret file is empty: {SYS_MGMT_SECRET_FILE}')
 
     # Generate HMAC token for the endpoint
     endpoint = f'/{action}'
     token = hmac.new(secret.encode(), endpoint.encode(), hashlib.sha256).hexdigest()
 
     # Send request to power-mgmt container via host network
-    url = f'http://power-mgmt:9999{endpoint}'
+    url = f'http://192.168.1.253:{SYS_MGMT_PORT}{endpoint}'
     headers = {'Authorization': f'Bearer {token}'}
 
     response = requests.post(url, headers=headers, timeout=5)
@@ -239,7 +227,7 @@ def rpc_reboot_sys(cookie):
     logging.info(f'rpc_reboot_sys(cookie={cookie})')
     hub_authenticate(cookie)
     logging.info('rpc_reboot_sys: Permission granted. Sending reboot command to power-mgmt...')
-    result = send_power_mgmt_cmd('reboot')
+    result = send_sys_mgmt_cmd('reboot')
     logging.info(f'rpc_reboot_sys: {result}')
     return cookie
 
@@ -247,7 +235,7 @@ def rpc_shutdown_sys(cookie):
     logging.info(f'rpc_shutdown_sys(cookie={cookie})')
     hub_authenticate(cookie)
     logging.info('rpc_shutdown_sys: Permission granted. Sending shutdown command to power-mgmt...')
-    result = send_power_mgmt_cmd('shutdown')
+    result = send_sys_mgmt_cmd('shutdown')
     logging.info(f'rpc_shutdown_sys: {result}')
     return cookie
 
@@ -285,7 +273,7 @@ def application(request):
 
 def main():
     parser = argparse.ArgumentParser(description='Hubitat Offload Daemon')
-    parser.add_argument('--rpc-addr', type=str, default=get_host_ip_addr(), help='IP address to bing server to')
+    parser.add_argument('--rpc-addr', type=str, default='0.0.0.0', help='IP address to bing server to')
     parser.add_argument('--rpc-port', type=int, default=RPC_PORT, help='TCP port to listen on')
     parser.add_argument('--processes', type=int, default=3, help='Max number of processes')
     parser.add_argument('--verbose', action='store_true', help='Verbose output')

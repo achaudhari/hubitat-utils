@@ -24,27 +24,6 @@ services:
     extra_hosts:
       - "hubitat:192.168.1.192"
 
-  # Power Management - Privileged container for system reboot/shutdown
-  power-mgmt:
-    image: python:3.11-alpine
-    container_name: power-mgmt
-    hostname: power-mgmt
-    restart: unless-stopped
-    userns_mode: "host" # Run in the host user namespace and access docker socket
-    # network_mode: host
-    command: python3 /opt/power-mgmt.py
-    volumes:
-      - ./power-mgmt/power-mgmt.py:/opt/power-mgmt.py:ro
-      - /run/systemd:/run/systemd:ro
-    environment:
-      - POWER_MGMT_SECRET=${HUBITAT_SECRET}
-    privileged: true
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "5m"
-        max-file: "2"
-
   # InfluxDB - Time-series database for sensor data
   influxdb:
     image: docker.io/library/influxdb:1.8
