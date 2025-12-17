@@ -14,6 +14,8 @@ from email.mime.application import MIMEApplication
 from email.mime.text import MIMEText
 import mimetypes
 
+# pylint: disable=C0113,C0114,C0115,C0116,C0103
+
 # ---------------------------------------
 #   Email Utilities
 # ---------------------------------------
@@ -40,10 +42,10 @@ class EmailUtils:
                f'font-size:1px;color:rgba(0,0,0,0);text-indent:9px;">MsgId:{rand_md5}</span>'
 
     @staticmethod
-    def send_email_text(email_addr, subject, body, uniquify = True):
+    def send_email_text(from_addr, to_addr, subject, body, uniquify = False):
         msg = MIMEMultipart()
-        msg['To'] = email_addr
-        msg['From'] = f'Automation Bot <{email_addr}>'
+        msg['To'] = to_addr
+        msg['From'] = f'Automation Bot <{from_addr}>'
         msg['In-Reply-To'] = msg['From']
         msg['Subject'] = subject
         msg['Message-Id'] = EmailUtils._gen_msg_id()
@@ -51,13 +53,13 @@ class EmailUtils:
             body += EmailUtils.unique_footer()
         body = MIMEText(f'<html><body>{body}</body></html>', _subtype='html')
         msg.attach(body)
-        EmailUtils._send_msg(email_addr, email_addr, msg)
+        EmailUtils._send_msg(from_addr, to_addr, msg)
 
     @staticmethod
-    def send_email_image(email_addr, subject, img_fname):
+    def send_email_image(from_addr, to_addr, subject, img_fname):
         msg = MIMEMultipart()
-        msg['To'] = email_addr
-        msg['From'] = f'Automation Bot <{email_addr}>'
+        msg['To'] = to_addr
+        msg['From'] = f'Automation Bot <{from_addr}>'
         msg['In-Reply-To'] = msg['From']
         msg['Subject'] = subject
         msg['Message-Id'] = EmailUtils._gen_msg_id()
@@ -78,13 +80,15 @@ class EmailUtils:
             attachment.add_header('Content-ID', '<img_payload>')
             attachment.add_header('Content-Disposition', 'inline', filename=img_fname)
         msg.attach(attachment)
-        EmailUtils._send_msg(email_addr, email_addr, msg)
+        EmailUtils._send_msg(from_addr, to_addr, msg)
 
     @staticmethod
-    def send_email_html(email_addr, subject, body_html, inline_images = {}, attachments = []):
+    def send_email_html(
+        from_addr, to_addr, subject, body_html, inline_images = {}, attachments = []
+    ):
         msg = MIMEMultipart()
-        msg['To'] = email_addr
-        msg['From'] = f'Automation Bot <{email_addr}>'
+        msg['To'] = to_addr
+        msg['From'] = f'Automation Bot <{from_addr}>'
         msg['In-Reply-To'] = msg['From']
         msg['Subject'] = subject
         msg['Message-Id'] = EmailUtils._gen_msg_id()
@@ -110,7 +114,7 @@ class EmailUtils:
                 part = MIMEApplication(fd.read(), Name=os.path.basename(att_fname))
             part['Content-Disposition'] = 'attachment; filename="%s"' % os.path.basename(att_fname)
             msg.attach(part)
-        EmailUtils._send_msg(email_addr, email_addr, msg)
+        EmailUtils._send_msg(from_addr, to_addr, msg)
 
 # ---------------------------------------
 #   MAC Address Lookup
@@ -121,7 +125,7 @@ class MacAddrDb:
         self.mac_tbls = {}
         for tbl, fname in FILE_MAP.items():
             self.mac_tbls[tbl] = {}
-            with open(os.path.join(table_dir, fname)) as tbl_f:
+            with open(os.path.join(table_dir, fname), 'r', encoding='utf-8') as tbl_f:
                 for csv_l in tbl_f.readlines():
                     toks = [x.strip() for x in csv_l.split(',')]
                     self.mac_tbls[tbl][toks[1].upper()] = toks[2]

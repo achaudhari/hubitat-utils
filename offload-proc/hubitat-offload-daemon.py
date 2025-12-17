@@ -28,6 +28,8 @@ SYS_MGMT_SECRET_FILE = os.path.join(CFG_DIR, 'sysmgmtd-secret.txt')
 RPC_PORT = 4226
 SYS_MGMT_PORT = 4227
 
+NOTIF_FROM_EMAIL = 'hauto@heliologic.xyz'
+REPORT_FROM_EMAIL = 'hauto-reports@heliologic.xyz'
 
 def read_secret_file(secret_file: str):
     if not os.path.isfile(secret_file):
@@ -76,7 +78,7 @@ def rpc_email_text(email_addr, subject, email_body):
     email_body = email_body.replace('\n', '<br>').replace('\t', '&emsp;')
     logging.info('rpc_email_text(email_addr=%s, subject=%s, email_body=%s)',
                  email_addr, subject, email_body)
-    EmailUtils.send_email_text(email_addr, subject, email_body)
+    EmailUtils.send_email_text(NOTIF_FROM_EMAIL, email_addr, subject, email_body)
     logging.info('rpc_email_text: Finished successfully')
 
 def rpc_email_history_report(email_addr, duration_hr):
@@ -85,7 +87,7 @@ def rpc_email_history_report(email_addr, duration_hr):
     t_stop = datetime.datetime.now()
     t_strt = t_stop - datetime.timedelta(hours=duration_hr)
     rgen = HistoryReportGen(os.path.join(CFG_DIR, 'history-report.json'))
-    rgen.send_email(t_strt, t_stop, email_addr)
+    rgen.send_email(t_strt, t_stop, REPORT_FROM_EMAIL, email_addr)
 
 def rpc_email_network_report(email_addr, verbosity):
     logging.info('rpc_email_network_report()')
@@ -100,7 +102,8 @@ def rpc_email_network_report(email_addr, verbosity):
             test_results[test] = result['output']
 
     rgen = NetworkReportGen(lanmon_blob['clients'], verbosity)
-    rgen.send_email(email_addr, test_results['speedtest'], test_results['dnsleaktest'])
+    rgen.send_email(REPORT_FROM_EMAIL, email_addr,
+                    test_results['speedtest'], test_results['dnsleaktest'])
 
 # ---------------------------------------
 #   Roomba Utilities

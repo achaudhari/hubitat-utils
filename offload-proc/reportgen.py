@@ -30,7 +30,7 @@ class HistoryReportGen:
         ms_stop = int(t_stop.timestamp() * 1000)
         return f'http://{addr}/d/{ids[dashboard]}?orgId=1&from={ms_strt}&to={ms_stop}&kiosk'
 
-    def send_email(self, t_strt, t_stop, email_addr):
+    def send_email(self, t_strt, t_stop, from_addr, to_addr):
         logging.info('HistoryReportGen: Pulling data from influxdb...')
         event_log = []
         door_tbl = [('Door', 'Opens')]
@@ -135,7 +135,7 @@ class HistoryReportGen:
 
         logging.info('HistoryReportGen: Sending email...')
         subject = f'INFO: Sensor History ({t_stop.strftime("%Y-%m-%d")})'
-        EmailUtils.send_email_html(email_addr, subject, str(doc))
+        EmailUtils.send_email_html(from_addr, to_addr, subject, str(doc))
         # EmailUtils.send_email_html(email_addr, subject, str(doc), imgs)
         # os.unlink(imgs['timeline_dashboard'])
         # os.unlink(imgs['environmental_dashboard'])
@@ -147,7 +147,7 @@ class NetworkReportGen:
         self.curr_clients = clients
         self.verbosity = verbosity
 
-    def send_email(self, email_addr, dnsleak_out=None, speedtest_out=None):
+    def send_email(self, from_addr, to_addr, dnsleak_out=None, speedtest_out=None):
         logging.info('NetworkReportGen: Generating network report HTML...')
         report_time = datetime.now()
         title = 'Network Report'
@@ -193,7 +193,7 @@ class NetworkReportGen:
 
         logging.info('NetworkReportGen: Sending email...')
         subject = f'INFO: Network Report ({report_time.strftime("%Y-%m-%d")})'
-        EmailUtils.send_email_html(email_addr, subject, str(doc))
+        EmailUtils.send_email_html(from_addr, to_addr, subject, str(doc))
         logging.info('NetworkReportGen: Email sent')
 
 

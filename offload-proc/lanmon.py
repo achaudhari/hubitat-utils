@@ -79,12 +79,15 @@ class LanMonitor:
     QUIESCE_HOURS = 24
 
     def __init__(self, rtr_ssh_addr, rtr_ssh_port, rtr_ssh_user, mac_tbl_dir, poll_interval,
-                 known_mac_addrs = [], notification_email_addr = None, pickle_dump_fname = None):
+                 known_mac_addrs = [],
+                 notification_email_to = None, notification_email_from = None,
+                 pickle_dump_fname = None):
         self.rtr_ifc = RouterIfc(rtr_ssh_addr, rtr_ssh_port, rtr_ssh_user, mac_tbl_dir)
         self.interval = poll_interval
         self.known_mac_addrs = set([x.split()[0].lower() for x in known_mac_addrs])
         self.mac_aliases = {x.split()[0].lower(): ' '.join(x.split()[1:]) for x in known_mac_addrs}
-        self.notification_email_addr = notification_email_addr
+        self.notification_email_to = notification_email_to
+        self.notification_email_from = notification_email_from
         self.pickle_dump_fname = pickle_dump_fname
         self.curr_clients = self.rtr_ifc.get_active_clients()
         self.last_clients = copy.deepcopy(self.curr_clients)
@@ -133,7 +136,7 @@ class LanMonitor:
                     new_client_idxs.append(idx)
                     self.quiesce_tbl[mac] = datetime.today() + timedelta(hours=LanMonitor.QUIESCE_HOURS)
             new_clients = [self.curr_clients[i] for i in new_client_idxs]
-            if new_clients and self.notification_email_addr:
+            if new_clients and self.notification_email_to:
                 self._send_notification(new_clients)
         for qmac in list(self.quiesce_tbl.keys()):
             if self.quiesce_tbl[qmac] < datetime.today():
@@ -170,7 +173,10 @@ class LanMonitor:
                             for tcell in trow:
                                 td(tcell)
         subject = f'INFO: LAN Monitor Notification ({datetime.now().strftime("%Y-%m-%d")})'
-        EmailUtils.send_email_html(self.notification_email_addr, subject, str(doc))
+        EmailUtils.send_email_html(
+            self.notification_email_from,
+            self.notification_email_to,
+            subject, str(doc))
 
     def stop(self):
         self.stop_thread = True
