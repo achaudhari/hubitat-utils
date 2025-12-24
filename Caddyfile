@@ -1,0 +1,108 @@
+(security_headers) {
+	header {
+		# Security headers
+		Strict-Transport-Security "max-age=15552000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		X-XSS-Protection "1; mode=block"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "interest-cohort=()"
+		X-Permitted-Cross-Domain-Policies "none"
+		X-Robots-Tag "noindex, nofollow"
+		X-Download-Options "noopen"
+		# Remove server identification
+		-Server
+		-X-Powered-By
+	}
+}
+
+(authelia) {
+	# Forward authentication to Authelia
+	forward_auth 192.168.1.251:9091 {
+		uri /api/verify?rd=https://auth.heliologic.xyz
+		copy_headers Remote-User Remote-Groups Remote-Name Remote-Email
+		# Pass original request info to Authelia
+		header_up X-Original-URL https://{host}{uri}
+		header_up X-Forwarded-Method {method}
+		header_up X-Forwarded-Proto https
+		header_up X-Forwarded-URI {uri}
+	}
+}
+
+http://hubitat.heliologic.xyz {
+
+	import authelia
+	reverse_proxy 192.168.1.192:80
+	import security_headers
+
+	log {
+		output file /var/log/caddy/hubitat.log {
+			roll_size 50MiB
+		}
+		format json
+	}
+}
+
+http://hubitat.heliologic.lan {
+
+	reverse_proxy 192.168.1.192:80
+
+	log {
+		output file /var/log/caddy/hubitat.log {
+			roll_size 50MiB
+		}
+		format json
+	}
+}
+
+http://monitor-hauto.heliologic.xyz {
+
+	import authelia
+	reverse_proxy grafana:3000
+	import security_headers
+
+	log {
+		output file /var/log/caddy/monitor-hauto.log {
+			roll_size 50MiB
+		}
+		format json
+	}
+}
+
+http://monitor-hauto.heliologic.lan {
+
+	reverse_proxy grafana:3000
+
+	log {
+		output file /var/log/caddy/monitor-hauto.log {
+			roll_size 50MiB
+		}
+		format json
+	}
+}
+
+http://cameras.heliologic.xyz {
+
+	import authelia
+	reverse_proxy 192.168.1.249:8971
+	import security_headers
+
+	log {
+		output file /var/log/caddy/cameras.log {
+			roll_size 50MiB
+		}
+		format json
+	}
+}
+
+http://cameras.heliologic.lan {
+
+	reverse_proxy 192.168.1.249:8971
+
+	log {
+		output file /var/log/caddy/cameras.log {
+			roll_size 50MiB
+		}
+		format json
+	}
+}

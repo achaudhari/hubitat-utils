@@ -1,29 +1,41 @@
 services:
-  # Caddy - Authentication proxy
+  # Reverse proxy
   caddy:
     image: caddy:alpine
     container_name: caddy
     restart: unless-stopped
+    ports:
+      - 80:80
     volumes:
-      - ./config/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy/data:/data
+      - ./caddy/config:/config
+      - ./caddy/logs:/var/log/caddy
     extra_hosts:
+      - "websvr-n0:192.168.1.251"
       - "hubitat:192.168.1.192"
       - "nvr-n0:192.168.1.249"
 
   # Cloudflared - Web access
-  cloudflared:
+  cloudflared_0:
     image: cloudflare/cloudflared:latest
-    container_name: cloudflared
+    container_name: cloudflared_0
     restart: unless-stopped
     command: tunnel --loglevel info --no-autoupdate run --token ${TOKEN_HLAB_HAUTO_HELIOLOGIC_XYZ}
     environment:
       - TOKEN_HLAB_HAUTO_HELIOLOGIC_XYZ=${TOKEN_HLAB_HAUTO_HELIOLOGIC_XYZ}
     volumes:
-      - ./cloudflared:/etc/cloudflared
-    extra_hosts:
-      - "hubitat:192.168.1.192"
+      - ./cloudflared_0:/etc/cloudflared
+
+  cloudflared_1:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared_1
+    restart: unless-stopped
+    command: tunnel --loglevel info --no-autoupdate run --token ${TOKEN_HLAB_HAUTO_HELIOLOGIC_XYZ}
+    environment:
+      - TOKEN_HLAB_HAUTO_HELIOLOGIC_XYZ=${TOKEN_HLAB_HAUTO_HELIOLOGIC_XYZ}
+    volumes:
+      - ./cloudflared_1:/etc/cloudflared
 
   # InfluxDB - Time-series database for sensor data
   influxdb:
@@ -64,8 +76,6 @@ services:
     container_name: grafana
     hostname: grafana
     restart: unless-stopped
-    ports:
-      - "3000:3000"  # Web interface
     volumes:
       # Persistent data (dashboards, users, etc.)
       - ./grafana:/var/lib/grafana:rw
@@ -97,8 +107,6 @@ services:
     container_name: hubitat-offload
     hostname: hubitat-offload
     restart: unless-stopped
-    # Note: Removed network_mode: host for Podman Compose compatibility
-    # Using bridge network with explicit port mapping instead
     ports:
       - "4226:4226"  # RPC Server
     volumes:
@@ -155,8 +163,6 @@ services:
     container_name: hubitat-event
     hostname: hubitat-event
     restart: unless-stopped
-    # Note: Removed network_mode: host for Podman Compose compatibility
-    # ICMP ping and network monitoring will work via bridge network with elevated caps
     volumes:
       - ./offload-proc:/opt/hauto/offload-proc:ro
       - ./config:/etc/hauto:ro
@@ -234,7 +240,3 @@ services:
   #     timeout: 10s
   #     retries: 3
   #     start_period: 30s
-
-volumes:
-  caddy_data:
-  caddy_config:

@@ -3,9 +3,6 @@ __pycache__
 # Docker-related (contains secrets and runtime data)
 config/
 cache/
-ssh/
-influxdb/
-grafana/
 .env
 setup-docker-env.sh
 
