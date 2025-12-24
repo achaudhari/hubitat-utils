@@ -1,0 +1,57 @@
+services:
+  frigate:
+    container_name: frigate
+    image: ghcr.io/blakeblackshear/frigate:stable
+    privileged: true
+    restart: unless-stopped
+    shm_size: '1gb'
+    devices:
+      - /dev/dri:/dev/dri     # Intel iGPU / NPU access
+    environment:
+      - LIBVA_DRIVER_NAME=iHD # Intel VAAPI driver (required)
+      - QSV_HEVC=1            # Optional: enable QuickSync HEVC decode if needed
+      - FRIGATE_MQTT_PASSWORD=${FRIGATE_MQTT_PASSWORD}
+      # Camera credentials
+      - FRIGATE_CAM_USER=${FRIGATE_CAM_USER}
+      - FRIGATE_INDOOR_CAM_01_IP=${FRIGATE_INDOOR_CAM_01_IP}
+      - FRIGATE_INDOOR_CAM_01_PASSWORD=${FRIGATE_INDOOR_CAM_01_PASSWORD}
+      - FRIGATE_INDOOR_CAM_02_IP=${FRIGATE_INDOOR_CAM_02_IP}
+      - FRIGATE_INDOOR_CAM_02_PASSWORD=${FRIGATE_INDOOR_CAM_02_PASSWORD}
+      - FRIGATE_INDOOR_CAM_03_IP=${FRIGATE_INDOOR_CAM_03_IP}
+      - FRIGATE_INDOOR_CAM_03_PASSWORD=${FRIGATE_INDOOR_CAM_03_PASSWORD}
+      - FRIGATE_INDOOR_CAM_04_IP=${FRIGATE_INDOOR_CAM_04_IP}
+      - FRIGATE_INDOOR_CAM_04_PASSWORD=${FRIGATE_INDOOR_CAM_04_PASSWORD}
+      - FRIGATE_OUTDOOR_CAM_01_IP=${FRIGATE_OUTDOOR_CAM_01_IP}
+      - FRIGATE_OUTDOOR_CAM_01_PASSWORD=${FRIGATE_OUTDOOR_CAM_01_PASSWORD}
+      - FRIGATE_OUTDOOR_CAM_02_IP=${FRIGATE_OUTDOOR_CAM_02_IP}
+      - FRIGATE_OUTDOOR_CAM_02_PASSWORD=${FRIGATE_OUTDOOR_CAM_02_PASSWORD}
+    ports:
+      - "1935:1935"  # RTMP
+      - "8971:8971"  # Authenticated UI
+      # - "5000:5000"  # Unauthenticated internal API
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./frigate.yml.base:/config/config.yml.base:ro
+      - ./entrypoint.sh:/entrypoint.sh:ro
+      - ./config:/config
+      - /srv/media/frigate:/media/frigate
+      - type: tmpfs  # Cache in RAM to reduce disk wear
+        target: /tmp/cache
+        tmpfs:
+          size: 1073741824  # 1GiB
+    entrypoint: /entrypoint.sh
+
+  mqtt:
+    container_name: mqtt
+    image: docker.io/eclipse-mosquitto:2.0
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
+      # - ./secrets/mosquitto_passwd:/mosquitto/config/mosquitto_passwd
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+

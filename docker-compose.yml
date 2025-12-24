@@ -10,6 +10,7 @@ services:
       - caddy_config:/config
     extra_hosts:
       - "hubitat:192.168.1.192"
+      - "nvr-n0:192.168.1.249"
 
   # Cloudflared - Web access
   cloudflared:

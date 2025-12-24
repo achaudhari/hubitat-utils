@@ -1,0 +1,218 @@
+version: 0.16-0
+
+# MQTT settings
+# -------------
+mqtt:
+  host: mqtt
+  port: 1883
+  user: frigate-mqtt
+  password: ${FRIGATE_MQTT_PASSWORD}
+
+# Login and Auth settings
+# -----------------------
+auth:
+  enabled: true
+  # Admin user and password will be generated on first startup
+  # To reset, uncomment the following
+  # reset_admin_password: true
+  failed_login_rate_limit: "1/second;5/minute;20/hour"
+tls:
+  # Disable the self signed certificate that will be used for port 8971
+  enabled: False
+
+# Detection settings
+# ------------------
+detect:
+  enabled: true
+detectors:
+  ov:
+    type: openvino
+    device: AUTO    # Works on NPU → GPU → CPU
+
+# ML and HW acceleration settings
+# -------------------------------
+model:
+  width: 300
+  height: 300
+  input_tensor: nhwc
+  input_pixel_format: bgr
+  path: /openvino-model/ssdlite_mobilenet_v2.xml
+  labelmap_path: /openvino-model/coco_91cl_bkgr.txt
+
+ffmpeg:
+  hwaccel_args:
+    - -hwaccel
+    - vaapi
+    - -hwaccel_device
+    - /dev/dri/renderD128
+    - -hwaccel_output_format
+    - yuv420p
+
+# Object tracking configuration
+# -----------------------------
+objects:
+  # Specify which objects to track
+  track:
+    - person
+    - cat
+    - dog
+  # Optional: Set minimum detection thresholds
+  filters:
+    cat:
+      min_area: 1000      # Minimum pixel area to consider (adjust based on camera distance)
+      max_area: 100000    # Maximum pixel area
+      threshold: 0.85     # Confidence threshold (0.0-1.0, higher = more strict)
+    dog:
+      min_area: 1000
+      max_area: 100000
+      threshold: 0.85
+    person:
+      min_area: 5000
+      max_area: 100000
+      threshold: 0.85
+
+# Recording configuration with event coalescing
+# ----------------------------------------------
+# pre_capture and post_capture control event coalescing by recording
+# buffer time before/after detections, preventing multiple back-to-back events
+record:
+  enabled: true
+  retain:
+    days: 7
+    mode: all
+  alerts:
+    pre_capture: 5      # Seconds before alert starts
+    post_capture: 15    # Seconds after alert ends (helps coalesce events)
+    retain:
+      days: 30
+      mode: motion
+  detections:
+    pre_capture: 5      # Seconds before detection starts
+    post_capture: 15    # Seconds after detection ends (helps coalesce events)
+    retain:
+      days: 30
+      mode: motion
+
+# All cameras and settings
+# ------------------------
+audio:
+  enabled: true
+
+cameras:
+  IndoorCam01:
+    ffmpeg:
+      inputs:
+        - path: rtsp://${FRIGATE_CAM_USER}:${FRIGATE_INDOOR_CAM_01_PASSWORD}@${FRIGATE_INDOOR_CAM_01_IP}:554/stream1
+          roles:
+            - detect
+            - record
+            - audio
+      output_args:
+        # # OSD with timestamp: CPU only
+        # record: -f segment -segment_time 10 -segment_format mp4 -reset_timestamps 1 -strftime 1 -c:v libx264 -preset ultrafast -c:a aac -vf "drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf:text='[IC1] %{localtime\:%Y-%m-%d %I\\\\\:%M\\\\\:%S %p %Z}':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.9:boxborderw=10:x=10:y=10"
+        # OSD with timestamp: CPU + GPU
+        record: -f segment -segment_time 10 -segment_format mp4 -reset_timestamps 1 -strftime 1 -vf "drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf:text='[IC1] %{localtime\:%Y-%m-%d %I\\\\\:%M\\\\\:%S %p %Z}':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.9:boxborderw=10:x=10:y=10,format=nv12,hwupload" -c:v h264_vaapi -qp 23 -c:a aac
+    detect:
+      width: 1280
+      height: 720
+      fps: 5
+
+  IndoorCam02:
+    ffmpeg:
+      inputs:
+        - path: rtsp://${FRIGATE_CAM_USER}:${FRIGATE_INDOOR_CAM_02_PASSWORD}@${FRIGATE_INDOOR_CAM_02_IP}:554/stream1
+          roles:
+            - detect
+            - record
+            - audio
+      output_args:
+        # # OSD with timestamp: CPU only
+        # record: -f segment -segment_time 10 -segment_format mp4 -reset_timestamps 1 -strftime 1 -c:v libx264 -preset ultrafast -c:a aac -vf "drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf:text='[IC2] %{localtime\:%Y-%m-%d %I\\\\\:%M\\\\\:%S %p %Z}':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.9:boxborderw=10:x=10:y=10"
+        # OSD with timestamp: CPU + GPU
+        record: -f segment -segment_time 10 -segment_format mp4 -reset_timestamps 1 -strftime 1 -vf "drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf:text='[IC2] %{localtime\:%Y-%m-%d %I\\\\\:%M\\\\\:%S %p %Z}':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.9:boxborderw=10:x=10:y=10,format=nv12,hwupload" -c:v h264_vaapi -qp 23 -c:a aac
+    detect:
+      width: 1280
+      height: 720
+      fps: 5
+
+  IndoorCam03:
+    ffmpeg:
+      inputs:
+        - path: rtsp://${FRIGATE_CAM_USER}:${FRIGATE_INDOOR_CAM_03_PASSWORD}@${FRIGATE_INDOOR_CAM_03_IP}:554/stream1
+          roles:
+            - detect
+            - record
+            - audio
+      output_args:
+        # # OSD with timestamp: CPU only
+        # record: -f segment -segment_time 10 -segment_format mp4 -reset_timestamps 1 -strftime 1 -c:v libx264 -preset ultrafast -c:a aac -vf "drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf:text='[IC3] %{localtime\:%Y-%m-%d %I\\\\\:%M\\\\\:%S %p %Z}':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.9:boxborderw=10:x=10:y=10"
+        # OSD with timestamp: CPU + GPU
+        record: -f segment -segment_time 10 -segment_format mp4 -reset_timestamps 1 -strftime 1 -vf "drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf:text='[IC3] %{localtime\:%Y-%m-%d %I\\\\\:%M\\\\\:%S %p %Z}':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.9:boxborderw=10:x=10:y=10,format=nv12,hwupload" -c:v h264_vaapi -qp 23 -c:a aac
+    detect:
+      width: 1280
+      height: 720
+      fps: 5
+
+  IndoorCam04:
+    ffmpeg:
+      inputs:
+        - path: rtsp://${FRIGATE_CAM_USER}:${FRIGATE_INDOOR_CAM_04_PASSWORD}@${FRIGATE_INDOOR_CAM_04_IP}:554/stream1
+          roles:
+            - detect
+            - record
+            - audio
+      output_args:
+        # # OSD with timestamp: CPU only
+        # record: -f segment -segment_time 10 -segment_format mp4 -reset_timestamps 1 -strftime 1 -c:v libx264 -preset ultrafast -c:a aac -vf "drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf:text='[IC4] %{localtime\:%Y-%m-%d %I\\\\\:%M\\\\\:%S %p %Z}':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.9:boxborderw=10:x=10:y=10"
+        # OSD with timestamp: CPU + GPU
+        record: -f segment -segment_time 10 -segment_format mp4 -reset_timestamps 1 -strftime 1 -vf "drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf:text='[IC4] %{localtime\:%Y-%m-%d %I\\\\\:%M\\\\\:%S %p %Z}':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.9:boxborderw=10:x=10:y=10,format=nv12,hwupload" -c:v h264_vaapi -qp 23 -c:a aac
+    detect:
+      width: 1280
+      height: 720
+      fps: 5
+
+  OutdoorCam01:
+    ffmpeg:
+      inputs:
+        - path: rtsp://${FRIGATE_CAM_USER}:${FRIGATE_OUTDOOR_CAM_01_PASSWORD}@${FRIGATE_OUTDOOR_CAM_01_IP}:554/stream1
+          roles:
+            - detect
+            - record
+            - audio
+      output_args:
+        # # OSD with timestamp: CPU only
+        # record: -f segment -segment_time 10 -segment_format mp4 -reset_timestamps 1 -strftime 1 -c:v libx264 -preset ultrafast -c:a aac -vf "drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf:text='[OC1] %{localtime\:%Y-%m-%d %I\\\\\:%M\\\\\:%S %p %Z}':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.9:boxborderw=10:x=10:y=10"
+        # OSD with timestamp: CPU + GPU
+        record: -f segment -segment_time 10 -segment_format mp4 -reset_timestamps 1 -strftime 1 -vf "drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf:text='[OC1] %{localtime\:%Y-%m-%d %I\\\\\:%M\\\\\:%S %p %Z}':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.9:boxborderw=10:x=10:y=10,format=nv12,hwupload" -c:v h264_vaapi -qp 23 -c:a aac
+    onvif:
+      host: ${FRIGATE_OUTDOOR_CAM_01_IP}
+      port: 2020
+      user: ${FRIGATE_CAM_USER}
+      password: ${FRIGATE_OUTDOOR_CAM_01_PASSWORD}
+    detect:
+      width: 1280
+      height: 720
+      fps: 5
+
+  OutdoorCam02:
+    ffmpeg:
+      inputs:
+        - path: rtsp://${FRIGATE_CAM_USER}:${FRIGATE_OUTDOOR_CAM_02_PASSWORD}@${FRIGATE_OUTDOOR_CAM_02_IP}:554/stream1
+          roles:
+            - detect
+            - record
+            - audio
+      output_args:
+        # # OSD with timestamp: CPU only
+        # record: -f segment -segment_time 10 -segment_format mp4 -reset_timestamps 1 -strftime 1 -c:v libx264 -preset ultrafast -c:a aac -vf "drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf:text='[OC2] %{localtime\:%Y-%m-%d %I\\\\\:%M\\\\\:%S %p %Z}':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.9:boxborderw=10:x=10:y=10"
+        # OSD with timestamp: CPU + GPU
+        record: -f segment -segment_time 10 -segment_format mp4 -reset_timestamps 1 -strftime 1 -vf "drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf:text='[OC2] %{localtime\:%Y-%m-%d %I\\\\\:%M\\\\\:%S %p %Z}':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.9:boxborderw=10:x=10:y=10,format=nv12,hwupload" -c:v h264_vaapi -qp 23 -c:a aac
+    onvif:
+      host: ${FRIGATE_OUTDOOR_CAM_02_IP}
+      port: 2020
+      user: ${FRIGATE_CAM_USER}
+      password: ${FRIGATE_OUTDOOR_CAM_02_PASSWORD}
+    detect:
+      width: 1280
+      height: 720
+      fps: 5
