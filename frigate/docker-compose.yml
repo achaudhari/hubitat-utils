@@ -8,6 +8,7 @@ services:
     devices:
       - /dev/dri:/dev/dri     # Intel iGPU / NPU access
     environment:
+      - TZ=America/Los_Angeles
       - LIBVA_DRIVER_NAME=iHD # Intel VAAPI driver (required)
       - QSV_HEVC=1            # Optional: enable QuickSync HEVC decode if needed
       - FRIGATE_MQTT_PASSWORD=${FRIGATE_MQTT_PASSWORD}
@@ -40,18 +41,51 @@ services:
         tmpfs:
           size: 1073741824  # 1GiB
     entrypoint: /entrypoint.sh
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/version"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
 
   mqtt:
     container_name: mqtt
     image: docker.io/eclipse-mosquitto:2.0
     restart: unless-stopped
     ports:
-      - "1883:1883"
-      - "9001:9001"
+      - "1883:1883"   # Standard MQTT port
+      # - "9001:9001"   # Websocket port
     volumes:
       - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
       # - ./secrets/mosquitto_passwd:/mosquitto/config/mosquitto_passwd
       - ./mosquitto/config:/mosquitto/config
       - ./mosquitto/data:/mosquitto/data
       - ./mosquitto/log:/mosquitto/log
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "1883"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  frigate-manager:
+    container_name: frigate-manager
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      frigate:
+        condition: service_healthy
+      mqtt:
+        condition: service_healthy
+    environment:
+      - TZ=America/Los_Angeles
+      - FRIGATE_AUTH_PASSWORD=${FRIGATE_AUTH_PASSWORD}
+      - FRIGATE_MQTT_PASSWORD=${FRIGATE_MQTT_PASSWORD}
+    volumes:
+      # Mount source files as volumes for easy development
+      - ./frigate_manager.py:/app/frigate_manager.py:ro
+      - ./frigate_mqtt_client.py:/app/frigate_mqtt_client.py:ro
+      - ./frigate-mgr.yml:/etc/frigate-mgr.yml:ro
 

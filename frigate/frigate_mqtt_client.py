@@ -983,3 +983,39 @@ class FrigateMQTTClient:
             Dictionary mapping camera name to CameraInfo object
         """
         return dict(self._cameras)
+
+    def get_camera_names(self) -> List[str]:
+        """
+        Get list of all discovered camera names.
+
+        Returns:
+            List of camera names
+        """
+        return list(self._cameras.keys())
+
+    def get_base_topic(self) -> str:
+        """
+        Get the base MQTT topic for Frigate.
+
+        Returns:
+            Base topic string (e.g., 'frigate')
+        """
+        return self.base_topic
+
+    def get_mqtt_host(self) -> str:
+        """
+        Get the MQTT broker host.
+
+        Returns:
+            MQTT host string
+        """
+        return self.mqtt_host
+
+    def get_mqtt_port(self) -> int:
+        """
+        Get the MQTT broker port.
+
+        Returns:
+            MQTT port number
+        """
+        return self.mqtt_port
