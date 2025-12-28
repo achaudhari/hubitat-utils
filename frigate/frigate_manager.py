@@ -99,6 +99,12 @@ class FrigateServerConfig:
 
 
 @dataclass
+class ConnectivityCheckerConfig:
+    """Configuration for camera connectivity checker."""
+    exceptions: Dict[str, str] = field(default_factory=dict)
+
+
+@dataclass
 class NotificationRule:
     """Configuration for a single notification rule."""
     camera: str  # Regex pattern for camera name
@@ -147,6 +153,8 @@ class NotificationConfig:
     smtp: SmtpConfig
     mqtt: MqttConfig
     frigate: FrigateServerConfig
+    connectivity_checker: ConnectivityCheckerConfig = field(
+        default_factory=ConnectivityCheckerConfig)
     rules: List[NotificationRule] = field(default_factory=list)
     default_email_to: List[str] = field(default_factory=list)
     default_hysteresis_seconds: float = 60.0
@@ -220,6 +228,12 @@ class ConfigLoader:
             password=frigate_data.get('password'),
         )
 
+        # Parse connectivity checker config
+        connectivity_data = data.get('connectivity_checker', {})
+        connectivity_checker = ConnectivityCheckerConfig(
+            exceptions=connectivity_data.get('exceptions', {})
+        )
+
         # Parse defaults
         defaults = data.get('defaults', {})
         default_email_to = defaults.get('email_to', [])
@@ -264,6 +278,7 @@ class ConfigLoader:
             smtp=smtp,
             mqtt=mqtt,
             frigate=frigate,
+            connectivity_checker=connectivity_checker,
             rules=rules,
             default_email_to=default_email_to,
             default_hysteresis_seconds=default_hysteresis,
@@ -1312,18 +1327,22 @@ class CameraConnectivityHandler(EventHandler):
     - Fetches all cameras from Frigate API
     - Checks connectivity to each camera via nc -z <ip> 554
     - Enables/disables cameras via MQTT based on connectivity
+    - Applies exceptions (cameras that should always be enabled/disabled)
     """
 
-    def __init__(self, frigate_api: FrigateApiHelper, mqtt_client: Optional[object] = None):
+    def __init__(self, frigate_api: FrigateApiHelper, mqtt_client: Optional[object] = None,
+                 exceptions: Optional[Dict[str, str]] = None):
         """
         Initialize connectivity handler.
 
         Args:
             frigate_api: FrigateApiHelper instance
             mqtt_client: Optional MQTT client for enable/disable commands
+            exceptions: Dict of camera names to state ('enabled' or 'disabled')
         """
         self.frigate_api = frigate_api
         self.mqtt_client = mqtt_client
+        self.exceptions = exceptions or {}
         self._logger = logging.getLogger(f"{__name__}.CameraConnectivityHandler")
 
     def handle_event(self, event: FrigateEvent):
@@ -1343,10 +1362,31 @@ class CameraConnectivityHandler(EventHandler):
 
             self._logger.debug("Found %d cameras to check", len(cameras))
 
-            # Check connectivity for each camera
-            for camera_name, ip_addr in cameras.items():
-                is_online = self._check_port(ip_addr, 554)
-                self._update_camera_state(camera_name, is_online)
+            # First, apply exceptions unconditionally
+            if self.exceptions:
+                self._logger.info("Applying %d camera exceptions", len(self.exceptions))
+                for camera_name, desired_state in self.exceptions.items():
+                    if desired_state.lower() == 'enabled':
+                        self._update_camera_state(camera_name, True, is_exception=True)
+                    elif desired_state.lower() == 'disabled':
+                        self._update_camera_state(camera_name, False, is_exception=True)
+                    else:
+                        self._logger.warning(
+                            "Invalid state '%s' for camera %s (expected 'enabled' or 'disabled')",
+                            desired_state, camera_name
+                        )
+
+            # Check connectivity for remaining cameras (not in exceptions)
+            cameras_to_check = {
+                name: ip for name, ip in cameras.items()
+                if name not in self.exceptions
+            }
+
+            if cameras_to_check:
+                self._logger.info("Checking connectivity for %d cameras", len(cameras_to_check))
+                for camera_name, ip_addr in cameras_to_check.items():
+                    is_online = self._check_port(ip_addr, 554)
+                    self._update_camera_state(camera_name, is_online)
 
             self._logger.info("Camera connectivity check complete")
 
@@ -1383,13 +1423,14 @@ class CameraConnectivityHandler(EventHandler):
             self._logger.debug("Error checking %s:%d: %s", ip_addr, port, e)
             return False
 
-    def _update_camera_state(self, camera_name: str, is_online: bool):
+    def _update_camera_state(self, camera_name: str, is_online: bool, is_exception: bool = False):
         """
         Update camera state via MQTT.
 
         Args:
             camera_name: Name of the camera
-            is_online: Whether the camera is online
+            is_online: Whether the camera is online (or desired state for exceptions)
+            is_exception: Whether this is an exception (always enabled/disabled)
         """
         if not self.mqtt_client:
             self._logger.warning("MQTT client not available, cannot update camera state")
@@ -1404,9 +1445,10 @@ class CameraConnectivityHandler(EventHandler):
                 action = "disabled"
 
             status = "successfully" if success else "failed to"
+            reason = "(exception)" if is_exception else f"(online: {is_online})"
             self._logger.info(
-                "Camera %s %s %s (online: %s)",
-                camera_name, status, action, is_online
+                "Camera %s %s %s %s",
+                camera_name, status, action, reason
             )
         except Exception as e:  # pylint: disable=broad-exception-caught
             self._logger.error("Error updating state for camera %s: %s", camera_name, e)
@@ -1468,7 +1510,8 @@ class FrigateManager:
         # Add camera connectivity handler to event loop
         connectivity_handler = CameraConnectivityHandler(
             self.notification_manager.frigate_api,
-            mqtt_client=mqtt_client
+            mqtt_client=mqtt_client,
+            exceptions=self.config.connectivity_checker.exceptions
         )
         self.event_loop.add_handler(connectivity_handler)
 

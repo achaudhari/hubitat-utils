@@ -26,9 +26,16 @@ services:
       - FRIGATE_OUTDOOR_CAM_01_PASSWORD=${FRIGATE_OUTDOOR_CAM_01_PASSWORD}
       - FRIGATE_OUTDOOR_CAM_02_IP=${FRIGATE_OUTDOOR_CAM_02_IP}
       - FRIGATE_OUTDOOR_CAM_02_PASSWORD=${FRIGATE_OUTDOOR_CAM_02_PASSWORD}
+      - FRIGATE_DOORBELL_CAM_01_IP=${FRIGATE_DOORBELL_CAM_01_IP}
+      - FRIGATE_DOORBELL_CAM_01_USER=${FRIGATE_DOORBELL_CAM_01_USER}
+      - FRIGATE_DOORBELL_CAM_01_PASSWORD=${FRIGATE_DOORBELL_CAM_01_PASSWORD}
+      # WebRTC for 2-way audio
+      - FRIGATE_LOCAL_IP=${FRIGATE_LOCAL_IP}
     ports:
-      - "1935:1935"  # RTMP
       - "8971:8971"  # Authenticated UI
+      - "8555:8555/tcp"  # WebRTC
+      - "8555:8555/udp"  # WebRTC
+      # - "1935:1935"  # RTMP (not needed)
       # - "5000:5000"  # Unauthenticated internal API
     volumes:
       - /etc/localtime:/etc/localtime:ro
@@ -84,8 +91,33 @@ services:
       - FRIGATE_AUTH_PASSWORD=${FRIGATE_AUTH_PASSWORD}
       - FRIGATE_MQTT_PASSWORD=${FRIGATE_MQTT_PASSWORD}
     volumes:
-      # Mount source files as volumes for easy development
       - ./frigate_manager.py:/app/frigate_manager.py:ro
       - ./frigate_mqtt_client.py:/app/frigate_mqtt_client.py:ro
       - ./frigate-mgr.yml:/etc/frigate-mgr.yml:ro
+    command: >
+      python3 -u /app/frigate_manager.py -c /etc/frigate-mgr.yml
+
+  doorbell-monitor:
+    container_name: doorbell-monitor
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      mqtt:
+        condition: service_healthy
+    environment:
+      - TZ=America/Los_Angeles
+      # Environment variables referenced in the config file
+      - FRIGATE_MQTT_PASSWORD=${FRIGATE_MQTT_PASSWORD}
+      - FRIGATE_DOORBELL_CAM_01_IP=${FRIGATE_DOORBELL_CAM_01_IP}
+      - FRIGATE_DOORBELL_CAM_01_USER=${FRIGATE_DOORBELL_CAM_01_USER}
+      - FRIGATE_DOORBELL_CAM_01_PASSWORD=${FRIGATE_DOORBELL_CAM_01_PASSWORD}
+    volumes:
+      - ./doorbell_monitor.py:/app/doorbell_monitor.py:ro
+      - ./doorbell-mon.yml:/etc/doorbell-mon.yml:ro
+    command: >
+      python3 -u /app/doorbell_monitor.py -c /etc/doorbell-mon.yml
+    # # Network mode to access MQTT broker
+    # network_mode: "bridge"
 

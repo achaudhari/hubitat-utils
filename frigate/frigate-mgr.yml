@@ -48,6 +48,14 @@ frigate:
   username: admin
   password: ${FRIGATE_AUTH_PASSWORD}
 
+# Automatic Connectivity Checker
+# ------------------------------
+connectivity_checker:
+  exceptions:
+    DoorbellCam01: enabled    # Always keep enabled
+    OutdoorCam01: enabled     # Always keep enabled
+    OutdoorCam02: enabled     # Always keep enabled
+
 # Default Settings
 # ----------------
 # These apply to all notification rules unless overridden

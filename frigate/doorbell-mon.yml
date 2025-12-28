@@ -1,0 +1,32 @@
+# Doorbell Monitor Configuration
+# ============================================
+
+# Global settings
+poll_interval: 1  # How often to check for doorbell events (seconds)
+max_reconnect_attempts: 5  # Max reconnection attempts before giving up temporarily
+
+# MQTT Broker Configuration
+mqtt:
+  host: mqtt
+  port: 1883
+  username: frigate-mqtt
+  password: ${FRIGATE_MQTT_PASSWORD}
+
+# Doorbell Configurations
+# Each doorbell has a unique name and configuration
+doorbells:
+  # Front Door Reolink Doorbell
+  DoorbellCam01:
+    driver: reolink  # Driver type: reolink, tapo, etc.
+    ip: ${FRIGATE_DOORBELL_CAM_01_IP}  # Doorbell IP address
+    username: ${FRIGATE_DOORBELL_CAM_01_USER}  # Camera username
+    password: ${FRIGATE_DOORBELL_CAM_01_PASSWORD}  # Camera password
+    mqtt_topic_base: frigate/DoorbellCam01  # MQTT topic base for this doorbell
+    debounce_time: 5  # Ignore repeated presses within N seconds
+    # debug_api: true  # Enable API response debugging (temporary, for troubleshooting)
+
+# MQTT Topics Published:
+# ----------------------
+# For each doorbell, the following topics are published:
+#   {mqtt_topic_base}/doorbell_press_status   - "ON" then "OFF" when button pressed
+#   {mqtt_topic_base}/doorbell_press_ts       - ISO timestamp of last press

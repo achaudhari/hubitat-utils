@@ -8,6 +8,33 @@ mqtt:
   user: frigate-mqtt
   password: ${FRIGATE_MQTT_PASSWORD}
 
+# go2rtc settings for restreaming and 2-way audio
+# -----------------------------------------------
+# Note: For 2-way audio to work:
+# 1. Access Frigate via HTTPS (port 8971)
+# 2. Configure WebRTC candidates below
+# 3. Open port 8555 TCP/UDP in docker
+go2rtc:
+  streams:
+    # Reolink Video Doorbell stream configuration
+    # Using http-flv for main stream (best performance for Reolink 5MP and below)
+    # Two streams: one without backchannel for viewing, one with backchannel for 2-way talk
+    reolink_doorbell_rec:
+      # Main stream via http-flv (recommended for Reolink) - prevents go2rtc from blocking audio output
+      - "ffmpeg:http://${FRIGATE_DOORBELL_CAM_01_IP}/flv?port=1935&app=bcs&stream=channel0_main.bcs&user=${FRIGATE_DOORBELL_CAM_01_USER}&password=${FRIGATE_DOORBELL_CAM_01_PASSWORD}#video=copy#audio=copy"
+    # Stream with backchannel for 2-way audio
+    reolink_doorbell_twoway:
+      # RTSP stream with backchannel for 2-way talk
+      - rtsp://${FRIGATE_DOORBELL_CAM_01_USER}:${FRIGATE_DOORBELL_CAM_01_PASSWORD}@${FRIGATE_DOORBELL_CAM_01_IP}:554/Preview_01_main
+    # Sub stream for detect (lower resolution, direct RTSP)
+    reolink_doorbell_sub:
+      - rtsp://${FRIGATE_DOORBELL_CAM_01_USER}:${FRIGATE_DOORBELL_CAM_01_PASSWORD}@${FRIGATE_DOORBELL_CAM_01_IP}:554/Preview_01_sub
+  # WebRTC configuration for 2-way audio
+  webrtc:
+    candidates:
+      - ${FRIGATE_LOCAL_IP}:8555
+      - stun:8555
+
 # Login and Auth settings
 # -----------------------
 auth:
@@ -100,6 +127,8 @@ audio:
 
 cameras:
   IndoorCam01:
+    ui:
+      order: 10
     ffmpeg:
       inputs:
         - path: rtsp://${FRIGATE_CAM_USER}:${FRIGATE_INDOOR_CAM_01_PASSWORD}@${FRIGATE_INDOOR_CAM_01_IP}:554/stream1
@@ -118,6 +147,8 @@ cameras:
       fps: 5
 
   IndoorCam02:
+    ui:
+      order: 11
     ffmpeg:
       inputs:
         - path: rtsp://${FRIGATE_CAM_USER}:${FRIGATE_INDOOR_CAM_02_PASSWORD}@${FRIGATE_INDOOR_CAM_02_IP}:554/stream1
@@ -136,6 +167,8 @@ cameras:
       fps: 5
 
   IndoorCam03:
+    ui:
+      order: 12
     ffmpeg:
       inputs:
         - path: rtsp://${FRIGATE_CAM_USER}:${FRIGATE_INDOOR_CAM_03_PASSWORD}@${FRIGATE_INDOOR_CAM_03_IP}:554/stream1
@@ -154,6 +187,8 @@ cameras:
       fps: 5
 
   IndoorCam04:
+    ui:
+      order: 13
     ffmpeg:
       inputs:
         - path: rtsp://${FRIGATE_CAM_USER}:${FRIGATE_INDOOR_CAM_04_PASSWORD}@${FRIGATE_INDOOR_CAM_04_IP}:554/stream1
@@ -172,6 +207,8 @@ cameras:
       fps: 5
 
   OutdoorCam01:
+    ui:
+      order: 2
     ffmpeg:
       inputs:
         - path: rtsp://${FRIGATE_CAM_USER}:${FRIGATE_OUTDOOR_CAM_01_PASSWORD}@${FRIGATE_OUTDOOR_CAM_01_IP}:554/stream1
@@ -195,6 +232,8 @@ cameras:
       fps: 5
 
   OutdoorCam02:
+    ui:
+      order: 3
     ffmpeg:
       inputs:
         - path: rtsp://${FRIGATE_CAM_USER}:${FRIGATE_OUTDOOR_CAM_02_PASSWORD}@${FRIGATE_OUTDOOR_CAM_02_IP}:554/stream1
@@ -216,3 +255,69 @@ cameras:
       width: 1280
       height: 720
       fps: 5
+
+  # Reolink Video Doorbell (POE/WiFi)
+  # Note: Doorbell button press detection requires external script
+  # Use MQTT topic: frigate/DoorbellCam01/doorbell_press for button events
+  DoorbellCam01:
+    ui:
+      order: 1
+    ffmpeg:
+      inputs:
+        # Main stream via go2rtc (http-flv restream) for recording/viewing with audio
+        - path: rtsp://localhost:8554/reolink_doorbell_rec
+          input_args: preset-rtsp-restream
+          roles:
+            - record
+            - audio
+        # Sub stream for detection (lower resolution, less CPU usage)
+        - path: rtsp://localhost:8554/reolink_doorbell_sub
+          input_args: preset-rtsp-restream
+          roles:
+            - detect
+      # output_args:
+      #   # OSD with timestamp: CPU only (hardware acceleration doesn't work with go2rtc ffmpeg source)
+      #   record: -f segment -segment_time 10 -segment_format mp4 -reset_timestamps 1 -strftime 1 -c:v libx264 -preset ultrafast -c:a aac -vf "drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf:text='[Doorbell] %{localtime\:%Y-%m-%d %I\\\\\:%M\\\\\:%S %p %Z}':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.9:boxborderw=10:x=10:y=10"
+    # Live stream configuration with 2-way audio support
+    live:
+      streams:
+        TwoWayAudio: reolink_doorbell_twoway  # Enable 2-way audio via WebRTC
+        Default: reolink_doorbell_rec
+    # # ONVIF configuration for Reolink (excellent support)
+    # # Required for PTZ control and optimal 2-way audio
+    # onvif:
+    #   host: ${FRIGATE_DOORBELL_CAM_01_IP}
+    #   port: 8000  # Standard Reolink ONVIF port
+    #   user: ${FRIGATE_DOORBELL_CAM_01_USER}
+    #   password: ${FRIGATE_DOORBELL_CAM_01_PASSWORD}
+    detect:
+      width: 640   # Reolink sub stream typically 640x360 or 640x480
+      height: 360  # Adjust if your camera uses 480p sub stream
+      fps: 5
+    # Prioritize person detection for doorbell
+    objects:
+      track:
+        - person
+        - dog
+        - cat
+        - car
+        - backpack    # Often detects packages
+        - suitcase    # Larger boxes
+        - handbag     # Smaller packages
+      filters:
+        person:
+          min_area: 3000
+          max_area: 100000
+          threshold: 0.85
+        backpack:
+          min_area: 2000
+          max_area: 50000
+          threshold: 0.6
+        suitcase:
+          min_area: 2000
+          max_area: 50000
+          threshold: 0.6
+        handbag:
+          min_area: 1500
+          max_area: 30000
+          threshold: 0.6
