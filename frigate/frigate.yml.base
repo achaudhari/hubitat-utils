@@ -300,7 +300,6 @@ cameras:
         - person
         - dog
         - cat
-        - car
         - backpack    # Often detects packages
         - suitcase    # Larger boxes
         - handbag     # Smaller packages

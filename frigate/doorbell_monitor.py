@@ -13,7 +13,6 @@ import logging
 import json
 import os
 from abc import ABC, abstractmethod
-from datetime import datetime
 from typing import Dict, List, Optional
 import yaml
 import requests
@@ -199,6 +198,8 @@ class DoorbellMonitor:
         self.drivers: List[DoorbellDriver] = []
         self.poll_interval = self.config.get('poll_interval', 1)
         self.max_reconnect_attempts = self.config.get('max_reconnect_attempts', 5)
+        # Track enabled state for each camera
+        self.camera_enabled_state: Dict[str, bool] = {}
 
     def _load_config(self, config_file: str) -> Dict:
         """Load and validate YAML configuration"""
@@ -248,6 +249,7 @@ class DoorbellMonitor:
 
             self.mqtt_client.on_connect = self._on_mqtt_connect
             self.mqtt_client.on_disconnect = self._on_mqtt_disconnect
+            self.mqtt_client.on_message = self._on_mqtt_message
 
             logger.info("Connecting to MQTT broker at %s:%s", broker, port)
             self.mqtt_client.connect(broker, port, 60)
@@ -262,6 +264,15 @@ class DoorbellMonitor:
         """MQTT connection callback"""
         if rc == 0:
             logger.info("Connected to MQTT broker successfully")
+            # Subscribe to enabled/state for each doorbell camera
+            mqtt_config = self.config.get('mqtt', {})
+            base_topic = mqtt_config.get('base_topic', 'frigate')
+            for driver in self.drivers:
+                doorbell_config = self.config['doorbells'][driver.name]
+                camera_name = doorbell_config.get('camera_name', driver.name)
+                enabled_topic = f"{base_topic}/{camera_name}/enabled/state"
+                client.subscribe(enabled_topic)
+                logger.debug("Subscribed to %s", enabled_topic)
         else:
             logger.error("Failed to connect to MQTT broker with code %s", rc)
 
@@ -270,9 +281,40 @@ class DoorbellMonitor:
         if rc != 0:
             logger.warning("Unexpected MQTT disconnection (code %s). Reconnecting...", rc)
 
+    def _on_mqtt_message(self, client, userdata, msg):  # pylint: disable=unused-argument
+        """MQTT message callback"""
+        try:
+            topic = msg.topic
+            payload = msg.payload.decode('utf-8')
+
+            # Handle enabled/state messages
+            if topic.endswith('/enabled/state'):
+                camera = topic.split('/')[-3]  # Extract camera name from topic
+                new_state = (payload == 'ON')
+                old_state = self.camera_enabled_state.get(camera)
+
+                # Detect rising edge: camera coming back online
+                if new_state and not old_state:
+                    logger.info("[%s] Camera enabled - triggering re-login", camera)
+                    # Find the driver for this camera and re-login
+                    for driver in self.drivers:
+                        doorbell_config = self.config['doorbells'][driver.name]
+                        camera_name = doorbell_config.get('camera_name', driver.name)
+                        if camera_name == camera:
+                            driver.login()
+                            break
+                elif old_state and not new_state:
+                    logger.info("[%s] Camera disabled - pausing monitor", camera)
+
+                self.camera_enabled_state[camera] = new_state
+                logger.debug("[%s] Camera enabled state: %s", camera, payload)
+
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.error("Error handling MQTT message: %s", e)
+
     def publish_doorbell_event(self, doorbell_name: str, topic_base: str):
         """
-        Publish doorbell press event to MQTT
+        Publish doorbell press event to MQTT, including Frigate event with score=1.0
 
         Args:
             doorbell_name: Name of the doorbell that was pressed
@@ -283,19 +325,48 @@ class DoorbellMonitor:
             return
 
         try:
-            # Publish ON message
-            topic = f"{topic_base}/doorbell_press_status"
+            # Publish ON message (legacy/simple state)
+            topic = f"{topic_base}/doorbell_press/state"
             self.mqtt_client.publish(topic, "ON", retain=False)
             logger.info("[%s] Published to %s: ON", doorbell_name, topic)
+
+            # Publish Frigate-style event with score=1.0
+            event_topic = f"{topic_base}/events"
+            event_payload = {
+                "type": "new",
+                "after": {
+                    "id": f"doorbell_{doorbell_name}_{int(time.time())}",
+                    "camera": doorbell_name,
+                    "label": "doorbell_press",
+                    "score": 1.0,
+                    "box": [],
+                    "area": 0,
+                    "start_time": time.time(),
+                    "end_time": None,
+                    "top_score": 1.0,
+                    "false_positive": False,
+                    "current_zones": [],
+                    "entered_zones": [],
+                    "has_snapshot": False,
+                    "has_clip": False,
+                    "active": True,
+                    "stationary": False,
+                    "sub_label": None,
+                    "attributes": {},
+                    "recognized_license_plate": None,
+                    "recognized_license_plate_score": None,
+                    "current_estimated_speed": None,
+                    "average_estimated_speed": None,
+                    "velocity_angle": None
+                }
+            }
+            self.mqtt_client.publish(event_topic, json.dumps(event_payload), retain=False)
+            logger.info("[%s] Published Frigate event to %s", doorbell_name, event_topic)
+
             # Brief delay then publish OFF
-            time.sleep(0.1)
+            time.sleep(0.5)
             self.mqtt_client.publish(topic, "OFF", retain=False)
             logger.info("[%s] Published to %s: OFF", doorbell_name, topic)
-            # Also publish timestamp for reference
-            timestamp_topic = f"{topic_base}/doorbell_press_ts"
-            timestamp = datetime.now().isoformat()
-            self.mqtt_client.publish(timestamp_topic, timestamp, retain=True)
-            logger.info("[%s] Published to %s: %s", doorbell_name, timestamp_topic, timestamp)
 
         except Exception as e:  # pylint: disable=broad-exception-caught
             logger.error("[%s] Error publishing to MQTT: %s", doorbell_name, e)
@@ -329,9 +400,18 @@ class DoorbellMonitor:
                 # Check each doorbell for button press
                 for driver in self.drivers:
                     try:
+                        # Get camera name for this doorbell
+                        doorbell_config = self.config['doorbells'][driver.name]
+                        camera_name = doorbell_config.get('camera_name', driver.name)
+
+                        # Only check if camera is enabled (default to True if state unknown)
+                        is_enabled = self.camera_enabled_state.get(camera_name, True)
+                        if not is_enabled:
+                            logger.debug("[%s] Skipping check - camera disabled", driver.name)
+                            continue
+
                         if driver.check_doorbell_press():
                             # Get topic base from config
-                            doorbell_config = self.config['doorbells'][driver.name]
                             topic_base = doorbell_config.get(
                                 'mqtt_topic_base', f'frigate/{driver.name}')
                             self.publish_doorbell_event(driver.name, topic_base)

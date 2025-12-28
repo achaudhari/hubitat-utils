@@ -118,6 +118,7 @@ class NotificationRule:
     notify_on_end: bool = False  # Notify when event ends
     include_thumbnail: bool = True
     include_snapshot: bool = False
+    include_urls: bool = True  # Include event and clip URLs in notification
     subject_template: str = "[{camera}] {label} detected"
     quiet_hours_start: Optional[str] = None  # e.g., "22:00"
     quiet_hours_end: Optional[str] = None  # e.g., "07:00"
@@ -147,37 +148,19 @@ class NotificationRule:
             return now >= start or now <= end
 
 
-@dataclass
-class NotificationConfig:
-    """Complete notification configuration."""
-    smtp: SmtpConfig
-    mqtt: MqttConfig
-    frigate: FrigateServerConfig
-    connectivity_checker: ConnectivityCheckerConfig = field(
-        default_factory=ConnectivityCheckerConfig)
-    rules: List[NotificationRule] = field(default_factory=list)
-    default_email_to: List[str] = field(default_factory=list)
-    default_hysteresis_seconds: float = 60.0
-    default_min_score: float = 0.5
-
-
 # =============================================================================
 # Configuration Loader
 # =============================================================================
 
-class ConfigLoader:
+class ManagerConfig:
     """Load and validate configuration from YAML file."""
 
-    @staticmethod
-    def load(config_path: str) -> NotificationConfig:
+    def __init__(self, config_path: str):
         """
         Load configuration from YAML file.
 
         Args:
             config_path: Path to YAML configuration file
-
-        Returns:
-            NotificationConfig object
 
         Raises:
             FileNotFoundError: If config file doesn't exist
@@ -189,14 +172,10 @@ class ConfigLoader:
 
         with open(path, 'r', encoding='utf-8') as f:
             data = yaml.safe_load(os.path.expandvars(f.read()))
-        return ConfigLoader._parse_config(data)
 
-    @staticmethod
-    def _parse_config(data: Dict) -> NotificationConfig:
-        """Parse configuration dictionary into NotificationConfig."""
         # Parse SMTP config
         smtp_data = data.get('smtp', {})
-        smtp = SmtpConfig(
+        self.smtp = SmtpConfig(
             host=smtp_data.get('host', 'localhost'),
             port=smtp_data.get('port', 587),
             username=smtp_data.get('username', ''),
@@ -210,7 +189,7 @@ class ConfigLoader:
 
         # Parse MQTT config
         mqtt_data = data.get('mqtt', {})
-        mqtt = MqttConfig(
+        self.mqtt = MqttConfig(
             host=mqtt_data.get('host', 'localhost'),
             port=mqtt_data.get('port', 1883),
             username=mqtt_data.get('username'),
@@ -220,7 +199,7 @@ class ConfigLoader:
 
         # Parse Frigate server config
         frigate_data = data.get('frigate', {})
-        frigate = FrigateServerConfig(
+        self.frigate = FrigateServerConfig(
             auth_url=frigate_data.get('auth_url'),
             unauth_url=frigate_data.get('unauth_url', 'http://frigate:5000'),
             external_url=frigate_data.get('external_url'),
@@ -230,60 +209,49 @@ class ConfigLoader:
 
         # Parse connectivity checker config
         connectivity_data = data.get('connectivity_checker', {})
-        connectivity_checker = ConnectivityCheckerConfig(
+        self.connectivity_checker = ConnectivityCheckerConfig(
             exceptions=connectivity_data.get('exceptions', {})
         )
 
-        # Parse defaults
-        defaults = data.get('defaults', {})
-        default_email_to = defaults.get('email_to', [])
-        if isinstance(default_email_to, str):
-            default_email_to = [default_email_to]
-        default_hysteresis = defaults.get('hysteresis_seconds', 60.0)
-        default_min_score = defaults.get('min_score', 0.5)
-
-        # Parse notification rules
-        rules = []
-        for rule_data in data.get('notifications', []):
-            email_to = rule_data.get('email_to', default_email_to)
-            if isinstance(email_to, str):
-                email_to = [email_to]
-
-            zones = rule_data.get('zones')
-            if isinstance(zones, str):
-                zones = [zones]
-
+        # Parse notification defaults and rules
+        notifications = data.get('notifications', {})
+        defaults = notifications.get('defaults', {})
+        self.notification_rules = []
+        for rule_data in notifications.get('rules', []):
             rule = NotificationRule(
-                camera=rule_data.get('camera', '*'),
-                object_type=rule_data.get('object_type', '*'),
-                email_to=email_to,
-                hysteresis_seconds=rule_data.get('hysteresis_seconds', default_hysteresis),
-                min_score=rule_data.get('min_score', default_min_score),
-                enabled=rule_data.get('enabled', True),
-                zones=zones,
-                notify_on_new=rule_data.get('notify_on_new', True),
-                notify_on_end=rule_data.get('notify_on_end', False),
-                include_thumbnail=rule_data.get('include_thumbnail', True),
-                include_snapshot=rule_data.get('include_snapshot', False),
-                subject_template=rule_data.get(
-                    'subject_template',
-                    "[{camera}] {label} detected"
-                ),
-                quiet_hours_start=rule_data.get('quiet_hours_start'),
-                quiet_hours_end=rule_data.get('quiet_hours_end'),
+                enabled=rule_data.get('enabled',
+                                      defaults.get('enabled', True)),
+                camera=rule_data.get('camera',
+                                     defaults.get('camera', '.*')),
+                object_type=rule_data.get('object_type',
+                                          defaults.get('object_type', '.*')),
+                email_to=rule_data.get('email_to',
+                                       defaults.get('email_to', [])),
+                hysteresis_seconds=rule_data.get('hysteresis_seconds',
+                                                 defaults.get('hysteresis_seconds', 60.0)),
+                min_score=rule_data.get('min_score',
+                                        defaults.get('min_score', 0.5)),
+                zones=rule_data.get('zones',
+                                    defaults.get('zones', [])),
+                notify_on_new=rule_data.get('notify_on_new',
+                                            defaults.get('notify_on_new', True)),
+                notify_on_end=rule_data.get('notify_on_end',
+                                            defaults.get('notify_on_end', False)),
+                include_thumbnail=rule_data.get('include_thumbnail',
+                                                defaults.get('include_thumbnail', True)),
+                include_snapshot=rule_data.get('include_snapshot',
+                                               defaults.get('include_snapshot', False)),
+                include_urls=rule_data.get('include_urls',
+                                           defaults.get('include_urls', True)),
+                subject_template=rule_data.get('subject_template',
+                                               defaults.get('subject_template',
+                                                            "[{camera}] {label} detected")),
+                quiet_hours_start=rule_data.get('quiet_hours_start',
+                                                defaults.get('quiet_hours_start', None)),
+                quiet_hours_end=rule_data.get('quiet_hours_end',
+                                              defaults.get('quiet_hours_end', None)),
             )
-            rules.append(rule)
-
-        return NotificationConfig(
-            smtp=smtp,
-            mqtt=mqtt,
-            frigate=frigate,
-            connectivity_checker=connectivity_checker,
-            rules=rules,
-            default_email_to=default_email_to,
-            default_hysteresis_seconds=default_hysteresis,
-            default_min_score=default_min_score,
-        )
+            self.notification_rules.append(rule)
 
 
 # =============================================================================
@@ -750,7 +718,7 @@ class NotificationManager:
     - Thumbnail embedding
     """
 
-    def __init__(self, config: NotificationConfig):
+    def __init__(self, config: ManagerConfig):
         """
         Initialize notification manager.
 
@@ -766,7 +734,7 @@ class NotificationManager:
         self.hysteresis = HysteresisTracker()
 
         # All rules stored in a single list - regex matching doesn't benefit from indexing
-        self._rules: List[NotificationRule] = config.rules
+        self._rules: List[NotificationRule] = config.notification_rules
 
     def get_matching_rules(self, event: FrigateEvent) -> List[NotificationRule]:
         """
@@ -926,10 +894,11 @@ class NotificationManager:
         html_body = self._build_html_body(
             event,
             thumbnail_cid=thumbnail_cid,
-            snapshot_cid=snapshot_cid
+            snapshot_cid=snapshot_cid,
+            include_urls=rule.include_urls
         )
 
-        plain_body = self._build_plain_body(event)
+        plain_body = self._build_plain_body(event, include_urls=rule.include_urls)
 
         # Send email
         return self.email_sender.send_html_email(
@@ -944,7 +913,8 @@ class NotificationManager:
         self,
         event: FrigateEvent,
         thumbnail_cid: Optional[str] = None,
-        snapshot_cid: Optional[str] = None
+        snapshot_cid: Optional[str] = None,
+        include_urls: bool = True
     ) -> str:
         """Build HTML email body."""
         event_data = event.after
@@ -1122,17 +1092,24 @@ class NotificationManager:
 
         html += f"""
         </div>
+"""
+
+        if include_urls:
+            html += f"""
         <div style="text-align: center;">
             <a href="{event_url}" class="button">📋 View Review Page</a>
             <a href="{clip_url}" class="button">🎬 View Video Clip</a>
         </div>
+"""
+
+        html += """
     </div>
 </body>
 </html>
 """
         return html
 
-    def _build_plain_body(self, event: FrigateEvent) -> str:
+    def _build_plain_body(self, event: FrigateEvent, include_urls: bool = True) -> str:
         """Build plain text email body."""
         event_data = event.after
         event_url = self.frigate_api.get_event_url(event_data.id)
@@ -1150,10 +1127,15 @@ Details:
 - Confidence: {event_data.top_score:.0%}
 - Time: {timestamp_str}
 - Zones: {zones_str}
+"""
+
+        if include_urls:
+            text += f"""
 
 Review Page: {event_url}
 Video Clip: {clip_url}
 """
+
         return text.strip()
 
 
@@ -1192,7 +1174,7 @@ class EventLoop:
     Currently stubbed - extend with additional handlers as needed.
     """
 
-    def __init__(self, config: NotificationConfig, mqtt_client: FrigateMQTTClient):
+    def __init__(self, config: ManagerConfig, mqtt_client: FrigateMQTTClient):
         """
         Initialize event loop.
 
@@ -1488,7 +1470,7 @@ class FrigateManager:
         self._logger.info("Loading configuration from %s", config_path)
 
         # Load configuration
-        self.config = ConfigLoader.load(config_path)
+        self.config = ManagerConfig(config_path)
 
         # Initialize MQTT client
         mqtt_client = FrigateMQTTClient(

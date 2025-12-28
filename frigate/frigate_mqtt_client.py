@@ -190,6 +190,8 @@ class CameraInfo:
     motion_threshold: Optional[str] = None
     # Motion contour area value
     motion_contour_area: Optional[str] = None
+    # Doorbell press status (ON/OFF)
+    doorbell_press_state: Optional[str] = None
     # Camera FPS from stats
     camera_fps: Optional[float] = None
     # Detection FPS from stats
@@ -260,6 +262,7 @@ class FrigateMQTTClient:
             'snapshots': [],
             'motion_threshold': [],
             'motion_contour_area': [],
+            'doorbell_press': [],
         }
 
         # Camera tracking
@@ -392,6 +395,8 @@ class FrigateMQTTClient:
                 self._handle_motion_threshold_state(topic, payload)
             elif topic.endswith('/motion_contour_area/state'):
                 self._handle_motion_contour_area_state(topic, payload)
+            elif topic.endswith('/doorbell_press/state'):
+                self._handle_doorbell_press_state(topic, payload)
 
         except Exception as e:  # pylint: disable=broad-exception-caught
             self._logger.error("Error handling message: %s", e)
@@ -411,6 +416,7 @@ class FrigateMQTTClient:
             f"{self.base_topic}/+/snapshots/state",
             f"{self.base_topic}/+/motion_threshold/state",
             f"{self.base_topic}/+/motion_contour_area/state",
+            f"{self.base_topic}/+/doorbell_press/state",
         ]
 
         for topic in topics:
@@ -572,6 +578,20 @@ class FrigateMQTTClient:
         for handler in self._event_handlers['motion_contour_area']:
             handler(camera, state)
 
+    def _handle_doorbell_press_state(self, topic: str, payload: str):
+        """Handle doorbell press state messages."""
+        camera = topic.split('/')[1]
+        state = payload
+
+        # Update camera info
+        if camera not in self._cameras:
+            self._cameras[camera] = CameraInfo(name=camera)
+        self._cameras[camera].doorbell_press_state = state
+
+        # Call registered handlers
+        for handler in self._event_handlers['doorbell_press']:
+            handler(camera, state)
+
     # ==================== Event Subscription ====================
 
     def on_event(self, handler: Callable[[FrigateEvent], None]):
@@ -672,6 +692,15 @@ class FrigateMQTTClient:
             handler: Callback function that receives (camera_name, state)
         """
         self._event_handlers['motion_contour_area'].append(handler)
+
+    def on_doorbell_press(self, handler: Callable[[str, str], None]):
+        """
+        Register handler for doorbell press events.
+
+        Args:
+            handler: Callback function that receives (camera_name, state)
+        """
+        self._event_handlers['doorbell_press'].append(handler)
 
     # ==================== Command Methods ====================
 

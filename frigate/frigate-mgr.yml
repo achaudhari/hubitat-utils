@@ -56,21 +56,11 @@ connectivity_checker:
     OutdoorCam01: enabled     # Always keep enabled
     OutdoorCam02: enabled     # Always keep enabled
 
-# Default Settings
-# ----------------
-# These apply to all notification rules unless overridden
-defaults:
-  email_to:
-    - heliologic@mailbox.org
-  hysteresis_seconds: 60    # Minimum seconds between notifications per camera/object
-  min_score: 0.7            # Minimum confidence score (0.0-1.0)
-  include_thumbnail: true   # Do embed thumbnail in email
-  include_snapshot: false   # Dont embed full snapshot in email
-
 # Notification Rules
 # ------------------
 # Define rules for when and how to send notifications.
 # Rules are evaluated in order; multiple rules can match the same event.
+# Each rule has the following available field. Global values in "defaults".
 #
 # Available fields:
 #   camera: Regex pattern for camera name (e.g., 'OutdoorCam.*', 'Indoor.*', or '*' for all)
@@ -84,6 +74,7 @@ defaults:
 #   notify_on_end: Send notification when event ends (default: false)
 #   include_thumbnail: Embed thumbnail in email (default: true)
 #   include_snapshot: Embed full snapshot in email (default: false)
+#   include_urls: Include URLs to the event and clip in the notification (default: true)
 #   subject_template: Email subject template with {camera}, {label}, {score}, {zones}
 #   quiet_hours_start: Start of quiet hours (HH:MM format, e.g., "22:00")
 #   quiet_hours_end: End of quiet hours (HH:MM format, e.g., "07:00")
@@ -98,29 +89,52 @@ defaults:
 #       '.*Cam0[1-3]'       - Matches any camera ending in Cam01, Cam02, or Cam03
 
 notifications:
-  - camera: 'IndoorCam.*'
-    object_type: 'dog|cat'
-    hysteresis_seconds: 120
-    min_score: 0.85
-    subject_template: "🐕 [{camera}] Animal detected"
+  defaults: # These apply to all notification rules unless overridden
+    email_to:
+      - heliologic@mailbox.org
+    hysteresis_seconds: 60    # Minimum seconds between notifications per camera/object
+    min_score: 0.7            # Minimum confidence score (0.0-1.0)
+    include_thumbnail: true   # Do embed thumbnail in email
+    include_snapshot: false   # Dont embed full snapshot in email
 
-  - camera: 'IndoorCam.*'
-    object_type: 'person'
-    hysteresis_seconds: 600
-    min_score: 0.85
-    subject_template: "🧍 [{camera}] Person detected"
+  rules:  # Rules are evaluated in order; multiple rules can match the same event
+    - camera: 'IndoorCam.*'
+      object_type: 'dog|cat'
+      hysteresis_seconds: 180
+      min_score: 0.85
+      subject_template: "🐕 [{camera}] Animal seen inside"
 
-  - camera: 'OutdoorCam.*'
-    object_type: 'dog|cat'
-    hysteresis_seconds: 600
-    min_score: 0.85
-    subject_template: "🐕 [{camera}] Animal detected"
+    - camera: 'IndoorCam.*'
+      object_type: 'person'
+      hysteresis_seconds: 900
+      min_score: 0.85
+      subject_template: "🧍 [{camera}] Person seen inside"
 
-  - camera: 'OutdoorCam.*'
-    object_type: 'person'
-    hysteresis_seconds: 120
-    min_score: 0.85
-    subject_template: "🧍 [{camera}] Person detected"
+    - camera: 'OutdoorCam.*'
+      object_type: 'dog|cat'
+      hysteresis_seconds: 180
+      min_score: 0.85
+      subject_template: "🐕 [{camera}] Animal seen outside"
+
+    - camera: 'OutdoorCam.*'
+      object_type: 'person'
+      hysteresis_seconds: 120
+      min_score: 0.85
+      subject_template: "🧍 [{camera}] Person seen outside"
+
+    - camera: 'DoorbellCam.*'
+      object_type: 'person'
+      hysteresis_seconds: 120
+      min_score: 0.85
+      subject_template: "🚪 [{camera}] Person seen at door"
+
+    - camera: 'DoorbellCam.*'
+      object_type: 'doorbell_press'
+      hysteresis_seconds: 15
+      min_score: 0.85
+      subject_template: "🚪 [{camera}] Doorbell rung"
+      include_thumbnail: false
+      include_urls: false
 
 # notifications:
 #   # High priority: Person detection on outdoor cameras
