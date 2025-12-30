@@ -1090,7 +1090,7 @@ class NotificationManager:
             </div>
 """
 
-        html += f"""
+        html += """
         </div>
 """
 

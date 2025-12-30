@@ -292,7 +292,7 @@ cameras:
     #   password: ${FRIGATE_DOORBELL_CAM_01_PASSWORD}
     detect:
       width: 640   # Reolink sub stream typically 640x360 or 640x480
-      height: 360  # Adjust if your camera uses 480p sub stream
+      height: 480
       fps: 5
     # Prioritize person detection for doorbell
     objects:
@@ -307,16 +307,24 @@ cameras:
         person:
           min_area: 3000
           max_area: 100000
-          threshold: 0.85
+          threshold: 0.80
+        dog:
+          min_area: 1000
+          max_area: 100000
+          threshold: 0.50
+        cat:
+          min_area: 1000
+          max_area: 100000
+          threshold: 0.50
         backpack:
           min_area: 2000
           max_area: 50000
-          threshold: 0.6
+          threshold: 0.50
         suitcase:
           min_area: 2000
           max_area: 50000
-          threshold: 0.6
+          threshold: 0.50
         handbag:
           min_area: 1500
           max_area: 30000
-          threshold: 0.6
+          threshold: 0.50
