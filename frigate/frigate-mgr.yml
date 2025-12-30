@@ -51,6 +51,9 @@ frigate:
 # Automatic Connectivity Checker
 # ------------------------------
 connectivity_checker:
+  # Interval between connectivity checks (in seconds)
+  check_interval_seconds: 120
+  # Camera exceptions (always enabled/disabled regardless of connectivity)
   exceptions:
     DoorbellCam01: enabled    # Always keep enabled
     OutdoorCam01: enabled     # Always keep enabled
@@ -100,7 +103,7 @@ notifications:
   rules:  # Rules are evaluated in order; multiple rules can match the same event
     - camera: 'IndoorCam.*'
       object_type: 'dog|cat'
-      hysteresis_seconds: 180
+      hysteresis_seconds: 300
       min_score: 0.85
       subject_template: "🐕 [{camera}] Animal seen inside"
 
@@ -112,26 +115,32 @@ notifications:
 
     - camera: 'OutdoorCam.*'
       object_type: 'dog|cat'
-      hysteresis_seconds: 180
+      hysteresis_seconds: 300
       min_score: 0.85
       subject_template: "🐕 [{camera}] Animal seen outside"
 
     - camera: 'OutdoorCam.*'
       object_type: 'person'
-      hysteresis_seconds: 120
+      hysteresis_seconds: 900
       min_score: 0.85
       subject_template: "🧍 [{camera}] Person seen outside"
 
     - camera: 'DoorbellCam.*'
       object_type: 'person'
       hysteresis_seconds: 120
-      min_score: 0.85
+      min_score: 0.80
       subject_template: "🚪 [{camera}] Person seen at door"
+
+    - camera: 'DoorbellCam.*'
+      object_type: 'dog|cat'
+      hysteresis_seconds: 600
+      min_score: 0.50
+      subject_template: "🚪 [{camera}] Animal seen at door"
 
     - camera: 'DoorbellCam.*'
       object_type: 'doorbell_press'
       hysteresis_seconds: 15
-      min_score: 0.85
+      min_score: 0.80
       subject_template: "🚪 [{camera}] Doorbell rung"
       include_thumbnail: false
       include_urls: false

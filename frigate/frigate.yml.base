@@ -26,9 +26,9 @@ go2rtc:
     reolink_doorbell_twoway:
       # RTSP stream with backchannel for 2-way talk
       - rtsp://${FRIGATE_DOORBELL_CAM_01_USER}:${FRIGATE_DOORBELL_CAM_01_PASSWORD}@${FRIGATE_DOORBELL_CAM_01_IP}:554/Preview_01_main
-    # Sub stream for detect (lower resolution, direct RTSP)
-    reolink_doorbell_sub:
-      - rtsp://${FRIGATE_DOORBELL_CAM_01_USER}:${FRIGATE_DOORBELL_CAM_01_PASSWORD}@${FRIGATE_DOORBELL_CAM_01_IP}:554/Preview_01_sub
+    # # Sub stream for detect (lower resolution, direct RTSP)
+    # reolink_doorbell_sub:
+    #   - rtsp://${FRIGATE_DOORBELL_CAM_01_USER}:${FRIGATE_DOORBELL_CAM_01_PASSWORD}@${FRIGATE_DOORBELL_CAM_01_IP}:554/Preview_01_sub
   # WebRTC configuration for 2-way audio
   webrtc:
     candidates:
@@ -142,8 +142,8 @@ cameras:
         # OSD with timestamp: CPU + GPU
         record: -f segment -segment_time 10 -segment_format mp4 -reset_timestamps 1 -strftime 1 -vf "drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf:text='[IC1] %{localtime\:%Y-%m-%d %I\\\\\:%M\\\\\:%S %p %Z}':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.9:boxborderw=10:x=10:y=10,format=nv12,hwupload" -c:v h264_vaapi -qp 23 -c:a aac
     detect:
-      width: 1280
-      height: 720
+      width: 1152
+      height: 648
       fps: 5
 
   IndoorCam02:
@@ -162,8 +162,8 @@ cameras:
         # OSD with timestamp: CPU + GPU
         record: -f segment -segment_time 10 -segment_format mp4 -reset_timestamps 1 -strftime 1 -vf "drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf:text='[IC2] %{localtime\:%Y-%m-%d %I\\\\\:%M\\\\\:%S %p %Z}':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.9:boxborderw=10:x=10:y=10,format=nv12,hwupload" -c:v h264_vaapi -qp 23 -c:a aac
     detect:
-      width: 1280
-      height: 720
+      width: 1152
+      height: 648
       fps: 5
 
   IndoorCam03:
@@ -182,8 +182,8 @@ cameras:
         # OSD with timestamp: CPU + GPU
         record: -f segment -segment_time 10 -segment_format mp4 -reset_timestamps 1 -strftime 1 -vf "drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf:text='[IC3] %{localtime\:%Y-%m-%d %I\\\\\:%M\\\\\:%S %p %Z}':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.9:boxborderw=10:x=10:y=10,format=nv12,hwupload" -c:v h264_vaapi -qp 23 -c:a aac
     detect:
-      width: 1280
-      height: 720
+      width: 1152
+      height: 648
       fps: 5
 
   IndoorCam04:
@@ -202,8 +202,8 @@ cameras:
         # OSD with timestamp: CPU + GPU
         record: -f segment -segment_time 10 -segment_format mp4 -reset_timestamps 1 -strftime 1 -vf "drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf:text='[IC4] %{localtime\:%Y-%m-%d %I\\\\\:%M\\\\\:%S %p %Z}':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.9:boxborderw=10:x=10:y=10,format=nv12,hwupload" -c:v h264_vaapi -qp 23 -c:a aac
     detect:
-      width: 1280
-      height: 720
+      width: 1152
+      height: 648
       fps: 5
 
   OutdoorCam01:
@@ -227,8 +227,8 @@ cameras:
       user: ${FRIGATE_CAM_USER}
       password: ${FRIGATE_OUTDOOR_CAM_01_PASSWORD}
     detect:
-      width: 1280
-      height: 720
+      width: 1152
+      height: 648
       fps: 5
 
   OutdoorCam02:
@@ -252,8 +252,8 @@ cameras:
       user: ${FRIGATE_CAM_USER}
       password: ${FRIGATE_OUTDOOR_CAM_02_PASSWORD}
     detect:
-      width: 1280
-      height: 720
+      width: 1152
+      height: 648
       fps: 5
 
   # Reolink Video Doorbell (POE/WiFi)
@@ -270,19 +270,21 @@ cameras:
           roles:
             - record
             - audio
-        # Sub stream for detection (lower resolution, less CPU usage)
-        - path: rtsp://localhost:8554/reolink_doorbell_sub
-          input_args: preset-rtsp-restream
-          roles:
             - detect
+        # # Sub stream for detection (lower resolution, less CPU usage)
+        # - path: rtsp://localhost:8554/reolink_doorbell_sub
+        #   input_args: preset-rtsp-restream
+        #   roles:
+        #     - detect
       # output_args:
       #   # OSD with timestamp: CPU only (hardware acceleration doesn't work with go2rtc ffmpeg source)
       #   record: -f segment -segment_time 10 -segment_format mp4 -reset_timestamps 1 -strftime 1 -c:v libx264 -preset ultrafast -c:a aac -vf "drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf:text='[Doorbell] %{localtime\:%Y-%m-%d %I\\\\\:%M\\\\\:%S %p %Z}':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.9:boxborderw=10:x=10:y=10"
     # Live stream configuration with 2-way audio support
     live:
       streams:
-        TwoWayAudio: reolink_doorbell_twoway  # Enable 2-way audio via WebRTC
-        Default: reolink_doorbell_rec
+        Default: reolink_doorbell_twoway
+        # TwoWayAudio: reolink_doorbell_twoway  # Enable 2-way audio via WebRTC
+        # Default: reolink_doorbell_rec
     # # ONVIF configuration for Reolink (excellent support)
     # # Required for PTZ control and optimal 2-way audio
     # onvif:
@@ -291,8 +293,8 @@ cameras:
     #   user: ${FRIGATE_DOORBELL_CAM_01_USER}
     #   password: ${FRIGATE_DOORBELL_CAM_01_PASSWORD}
     detect:
-      width: 640   # Reolink sub stream typically 640x360 or 640x480
-      height: 480
+      width: 1280
+      height: 960
       fps: 5
     # Prioritize person detection for doorbell
     objects:

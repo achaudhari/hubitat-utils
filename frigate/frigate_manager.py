@@ -113,6 +113,7 @@ class NotificationRule:
     hysteresis_seconds: float = 60.0  # Minimum time between notifications
     min_score: float = 0.5  # Minimum confidence score to notify
     enabled: bool = True
+    rule_id: Optional[str] = None  # Unique identifier for this rule (for hysteresis tracking)
     zones: Optional[List[str]] = None  # Only notify if in these zones (None = all zones)
     notify_on_new: bool = True  # Notify on new events
     notify_on_end: bool = False  # Notify when event ends
@@ -217,8 +218,9 @@ class ManagerConfig:
         notifications = data.get('notifications', {})
         defaults = notifications.get('defaults', {})
         self.notification_rules = []
-        for rule_data in notifications.get('rules', []):
+        for rule_idx, rule_data in enumerate(notifications.get('rules', [])):
             rule = NotificationRule(
+                rule_id=rule_data.get('rule_id', f'rule_{rule_idx}'),
                 enabled=rule_data.get('enabled',
                                       defaults.get('enabled', True)),
                 camera=rule_data.get('camera',
@@ -670,23 +672,23 @@ class HysteresisTracker:
         self._last_notification: Dict[str, float] = {}  # type: ignore
         self._lock = threading.Lock()
 
-    def get_key(self, camera: str, object_type: str) -> str:
-        """Generate a unique key for camera/object_type combination."""
-        return f"{camera}:{object_type}"
+    def get_key(self, rule_id: str, camera: str) -> str:
+        """Generate a unique key for rule/camera combination."""
+        return f"{rule_id}:{camera}"
 
-    def can_notify(self, camera: str, object_type: str, hysteresis_seconds: float) -> bool:
+    def can_notify(self, rule_id: str, camera: str, hysteresis_seconds: float) -> bool:
         """
         Check if enough time has passed since last notification.
 
         Args:
+            rule_id: Unique rule identifier
             camera: Camera name
-            object_type: Type of detected object
             hysteresis_seconds: Minimum seconds between notifications
 
         Returns:
             True if notification is allowed
         """
-        key = self.get_key(camera, object_type)
+        key = self.get_key(rule_id, camera)
         current_time = time.time()
 
         with self._lock:
@@ -695,9 +697,9 @@ class HysteresisTracker:
                 return True
             return False
 
-    def record_notification(self, camera: str, object_type: str):
+    def record_notification(self, rule_id: str, camera: str):
         """Record that a notification was sent."""
-        key = self.get_key(camera, object_type)
+        key = self.get_key(rule_id, camera)
         with self._lock:
             self._last_notification[key] = time.time()
 
@@ -821,7 +823,6 @@ class NotificationManager:
     ):
         """Process a single rule for an event."""
         camera = event.after.camera
-        label = event.after.label
         score = event.after.top_score
 
         # Check if we should notify for this event type
@@ -837,7 +838,7 @@ class NotificationManager:
         if score < rule.min_score:
             self._logger.debug(
                 "Score %.2f below threshold %.2f for %s on %s",
-                score, rule.min_score, label, camera
+                score, rule.min_score, rule.object_type, camera
             )
             return
 
@@ -847,18 +848,17 @@ class NotificationManager:
             return
 
         # Check hysteresis
-        if not self.hysteresis.can_notify(camera, label, rule.hysteresis_seconds):
+        if self.hysteresis.can_notify(
+            rule.rule_id or 'default', camera, rule.hysteresis_seconds
+        ):
+            # Send notification
+            if self._send_notification(event, rule):
+                self.hysteresis.record_notification(rule.rule_id or 'default', camera)
+        else:
             self._logger.debug(
-                "Hysteresis active for %s on %s (%.0fs)",
-                label, camera, rule.hysteresis_seconds
+                "Hysteresis active for rule %s on camera %s (%.0fs)",
+                rule.rule_id, camera, rule.hysteresis_seconds
             )
-            return
-
-        # Send notification
-        success = self._send_notification(event, rule)
-
-        if success:
-            self.hysteresis.record_notification(camera, label)
 
     def _send_notification(self, event: FrigateEvent, rule: NotificationRule) -> bool:
         """Send notification email for an event."""
