@@ -94,6 +94,12 @@ services:
       - ./frigate_manager.py:/app/frigate_manager.py:ro
       - ./frigate_mqtt_client.py:/app/frigate_mqtt_client.py:ro
       - ./frigate-mgr.yml:/etc/frigate-mgr.yml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f /app/frigate_manager.py >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     command: >
       python3 -u /app/frigate_manager.py -c /etc/frigate-mgr.yml
 
@@ -116,8 +122,12 @@ services:
     volumes:
       - ./doorbell_monitor.py:/app/doorbell_monitor.py:ro
       - ./doorbell-mon.yml:/etc/doorbell-mon.yml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f /app/doorbell_monitor.py >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     command: >
       python3 -u /app/doorbell_monitor.py -c /etc/doorbell-mon.yml
-    # # Network mode to access MQTT broker
-    # network_mode: "bridge"
 

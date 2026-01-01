@@ -109,16 +109,16 @@ record:
     mode: all
   alerts:
     pre_capture: 5      # Seconds before alert starts
-    post_capture: 15    # Seconds after alert ends (helps coalesce events)
+    post_capture: 10    # Seconds after alert ends (helps coalesce events)
     retain:
       days: 30
-      mode: motion
+      mode: all
   detections:
     pre_capture: 5      # Seconds before detection starts
-    post_capture: 15    # Seconds after detection ends (helps coalesce events)
+    post_capture: 10    # Seconds after detection ends (helps coalesce events)
     retain:
       days: 30
-      mode: motion
+      mode: all
 
 # All cameras and settings
 # ------------------------
@@ -307,17 +307,17 @@ cameras:
         - handbag     # Smaller packages
       filters:
         person:
-          min_area: 3000
-          max_area: 100000
+          min_area: 50000
+          max_area: 250000
           threshold: 0.80
         dog:
           min_area: 1000
           max_area: 100000
-          threshold: 0.50
+          threshold: 0.80
         cat:
           min_area: 1000
           max_area: 100000
-          threshold: 0.50
+          threshold: 0.80
         backpack:
           min_area: 2000
           max_area: 50000

@@ -6,6 +6,6 @@ WORKDIR /app
 
 # Install netcat and Python dependencies from system packages
 RUN apt-get update \
-    && apt-get install -y netcat-openbsd \
+    && apt-get install -y --no-install-recommends procps netcat-openbsd \
     && pip install --no-cache-dir requests pyyaml paho-mqtt \
     && rm -rf /var/lib/apt/lists/*
