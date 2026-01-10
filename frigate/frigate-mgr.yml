@@ -9,7 +9,7 @@ smtp:
   host: 192.168.1.251
   port: 25
   # username: your-email@gmail.com
-  # password: your-app-password  # Use app-specific password for Gmail
+  # password: your-app-password
   use_tls: false
   use_ssl: false
   from_address: cameras@heliologic.xyz
@@ -113,11 +113,11 @@ notifications:
       min_score: 0.85
       subject_template: "🧍 [{camera}] Person seen inside"
 
-    - camera: 'OutdoorCam.*'
-      object_type: 'dog|cat'
-      hysteresis_seconds: 300
-      min_score: 0.85
-      subject_template: "🐕 [{camera}] Animal seen outside"
+    # - camera: 'OutdoorCam.*'
+    #   object_type: 'dog|cat'
+    #   hysteresis_seconds: 300
+    #   min_score: 0.85
+    #   subject_template: "🐕 [{camera}] Animal seen outside"
 
     - camera: 'OutdoorCam.*'
       object_type: 'person'
@@ -131,11 +131,11 @@ notifications:
       min_score: 0.80
       subject_template: "🚪 [{camera}] Person seen at door"
 
-    - camera: 'DoorbellCam.*'
-      object_type: 'dog|cat'
-      hysteresis_seconds: 600
-      min_score: 0.50
-      subject_template: "🚪 [{camera}] Animal seen at door"
+    # - camera: 'DoorbellCam.*'
+    #   object_type: 'dog|cat'
+    #   hysteresis_seconds: 600
+    #   min_score: 0.50
+    #   subject_template: "🚪 [{camera}] Animal seen at door"
 
     - camera: 'DoorbellCam.*'
       object_type: 'doorbell_press'
@@ -144,86 +144,3 @@ notifications:
       subject_template: "🚪 [{camera}] Doorbell rung"
       include_thumbnail: false
       include_urls: false
-
-# notifications:
-#   # High priority: Person detection on outdoor cameras
-#   - camera: OutdoorCam01
-#     object_type: person
-#     email_to:
-#       - security@example.com
-#       - homeowner@example.com
-#     hysteresis_seconds: 30
-#     min_score: 0.7
-#     notify_on_new: true
-#     include_thumbnail: true
-#     include_snapshot: true
-#     subject_template: "🚨 [{camera}] Person detected ({score})"
-
-#   - camera: OutdoorCam02
-#     object_type: person
-#     email_to:
-#       - security@example.com
-#     hysteresis_seconds: 30
-#     min_score: 0.7
-#     subject_template: "🚨 [{camera}] Person detected"
-
-#   # Vehicle detection - driveway camera only
-#   - camera: OutdoorCam01
-#     object_type: car
-#     email_to:
-#       - homeowner@example.com
-#     hysteresis_seconds: 120  # Less frequent for cars
-#     min_score: 0.6
-#     zones:
-#       - driveway
-#     subject_template: "🚗 [{camera}] Vehicle in driveway"
-
-#   # Pet detection on all indoor cameras
-#   - camera: IndoorCam01
-#     object_type: dog
-#     email_to:
-#       - pet-alerts@example.com
-#     hysteresis_seconds: 300  # Every 5 minutes max
-#     min_score: 0.75
-#     quiet_hours_start: "22:00"
-#     quiet_hours_end: "07:00"
-#     subject_template: "🐕 [{camera}] Dog detected"
-
-#   - camera: IndoorCam01
-#     object_type: cat
-#     email_to:
-#       - pet-alerts@example.com
-#     hysteresis_seconds: 300
-#     min_score: 0.75
-#     quiet_hours_start: "22:00"
-#     quiet_hours_end: "07:00"
-#     subject_template: "🐱 [{camera}] Cat detected"
-
-#   # Wildcard rule: Any person on any camera (lower priority/longer hysteresis)
-#   - camera: '*'
-#     object_type: person
-#     email_to:
-#       - general-alerts@example.com
-#     hysteresis_seconds: 300
-#     min_score: 0.8
-#     subject_template: "[{camera}] Person detected"
-
-#   # Zone-specific rule: Front door zone only
-#   - camera: OutdoorCam01
-#     object_type: person
-#     zones:
-#       - front_door
-#       - porch
-#     email_to:
-#       - doorbell@example.com
-#     hysteresis_seconds: 60
-#     min_score: 0.65
-#     subject_template: "🚪 Someone at the front door"
-
-#   # Example: Disabled rule (won't trigger)
-#   - camera: IndoorCam02
-#     object_type: person
-#     enabled: false
-#     email_to:
-#       - disabled@example.com
-#     subject_template: "This rule is disabled"

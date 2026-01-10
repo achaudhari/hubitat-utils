@@ -105,19 +105,19 @@ objects:
 record:
   enabled: true
   retain:
-    days: 7
+    days: 10
     mode: all
   alerts:
     pre_capture: 5      # Seconds before alert starts
     post_capture: 10    # Seconds after alert ends (helps coalesce events)
     retain:
-      days: 30
+      days: 45
       mode: all
   detections:
     pre_capture: 5      # Seconds before detection starts
     post_capture: 10    # Seconds after detection ends (helps coalesce events)
     retain:
-      days: 30
+      days: 45
       mode: all
 
 # All cameras and settings
