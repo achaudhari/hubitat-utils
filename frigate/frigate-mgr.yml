@@ -48,6 +48,24 @@ frigate:
   username: admin
   password: ${FRIGATE_AUTH_PASSWORD}
 
+# Cameras
+# -------
+cameras:
+  DoorbellCam01:
+    nice_name: "Front Door"
+  OutdoorCam01:
+    nice_name: "Side Entrance"
+  OutdoorCam02:
+    nice_name: "Backyard"
+  IndoorCam01:
+    nice_name: "Family Room"
+  IndoorCam02:
+    nice_name: "Living Room"
+  IndoorCam03:
+    nice_name: "Kitchen"
+  IndoorCam04:
+    nice_name: "Bedroom"
+
 # Automatic Connectivity Checker
 # ------------------------------
 connectivity_checker:
@@ -105,42 +123,42 @@ notifications:
       object_type: 'dog|cat'
       hysteresis_seconds: 300
       min_score: 0.85
-      subject_template: "🐕 [{camera}] Animal seen inside"
+      subject_template: "🐕 {camera_nice}: Animal seen inside"
 
     - camera: 'IndoorCam.*'
       object_type: 'person'
       hysteresis_seconds: 900
       min_score: 0.85
-      subject_template: "🧍 [{camera}] Person seen inside"
+      subject_template: "🧑‍🦱 {camera_nice}: Person seen inside"
 
     # - camera: 'OutdoorCam.*'
     #   object_type: 'dog|cat'
     #   hysteresis_seconds: 300
     #   min_score: 0.85
-    #   subject_template: "🐕 [{camera}] Animal seen outside"
+    #   subject_template: "🐕 {camera_nice}: Animal seen outside"
 
     - camera: 'OutdoorCam.*'
       object_type: 'person'
       hysteresis_seconds: 900
       min_score: 0.85
-      subject_template: "🧍 [{camera}] Person seen outside"
+      subject_template: "🧑‍🦱 {camera_nice}: Person seen outside"
 
     - camera: 'DoorbellCam.*'
       object_type: 'person'
       hysteresis_seconds: 120
       min_score: 0.80
-      subject_template: "🚪 [{camera}] Person seen at door"
+      subject_template: "🚪 {camera_nice}: Person seen at door"
 
     # - camera: 'DoorbellCam.*'
     #   object_type: 'dog|cat'
     #   hysteresis_seconds: 600
     #   min_score: 0.50
-    #   subject_template: "🚪 [{camera}] Animal seen at door"
+    #   subject_template: "🚪 {camera_nice}: Animal seen at door"
 
     - camera: 'DoorbellCam.*'
       object_type: 'doorbell_press'
       hysteresis_seconds: 15
       min_score: 0.80
-      subject_template: "🚪 [{camera}] Doorbell rung"
+      subject_template: "🚪 {camera_nice}: Doorbell rung"
       include_thumbnail: false
       include_urls: false

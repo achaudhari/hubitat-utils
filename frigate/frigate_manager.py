@@ -120,7 +120,7 @@ class NotificationRule:
     include_thumbnail: bool = True
     include_snapshot: bool = False
     include_urls: bool = True  # Include event and clip URLs in notification
-    subject_template: str = "[{camera}] {label} detected"
+    subject_template: str = "{camera}: {label} detected"
     quiet_hours_start: Optional[str] = None  # e.g., "22:00"
     quiet_hours_end: Optional[str] = None  # e.g., "07:00"
     # Compiled regex patterns (set during initialization)
@@ -208,6 +208,9 @@ class ManagerConfig:
             password=frigate_data.get('password'),
         )
 
+        # Parse camera info
+        self.camera_info = data.get('cameras', {})
+
         # Parse connectivity checker config
         connectivity_data = data.get('connectivity_checker', {})
         self.connectivity_checker = ConnectivityCheckerConfig(
@@ -247,7 +250,7 @@ class ManagerConfig:
                                            defaults.get('include_urls', True)),
                 subject_template=rule_data.get('subject_template',
                                                defaults.get('subject_template',
-                                                            "[{camera}] {label} detected")),
+                                                            "{camera}: {label} detected")),
                 quiet_hours_start=rule_data.get('quiet_hours_start',
                                                 defaults.get('quiet_hours_start', None)),
                 quiet_hours_end=rule_data.get('quiet_hours_end',
@@ -866,8 +869,14 @@ class NotificationManager:
         event_id = event_data.id
 
         # Build subject
+        camera_nice = event_data.camera
+        if event_data.camera in self.config.camera_info:
+            camera_nice = self.config.camera_info[event_data.camera].get(
+                'nice_name', event_data.camera)
+
         subject = rule.subject_template.format(
             camera=event_data.camera,
+            camera_nice=camera_nice,
             label=event_data.label,
             score=f"{event_data.top_score:.0%}",
             zones=', '.join(event_data.current_zones) or 'none',
@@ -1118,20 +1127,18 @@ class NotificationManager:
         timestamp = datetime.fromtimestamp(event_data.start_time)
         timestamp_str = timestamp.strftime("%Y-%m-%d %I:%M:%S %p")
 
-        zones_str = ', '.join(event_data.current_zones) if event_data.current_zones else 'None'
-
         text = f"""
 Details:
 - Camera: {event_data.camera}
 - Object: {event_data.label}
 - Confidence: {event_data.top_score:.0%}
 - Time: {timestamp_str}
-- Zones: {zones_str}
 """
+        if event_data.current_zones:
+            text += "- Zones: " + (', '.join(event_data.current_zones)) + "\n"
 
         if include_urls:
             text += f"""
-
 Review Page: {event_url}
 Video Clip: {clip_url}
 """
