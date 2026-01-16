@@ -114,7 +114,7 @@ notifications:
     email_to:
       - heliologic@mailbox.org
     hysteresis_seconds: 60    # Minimum seconds between notifications per camera/object
-    min_score: 0.7            # Minimum confidence score (0.0-1.0)
+    min_score: 0.85           # Minimum confidence score (0.0-1.0)
     include_thumbnail: true   # Do embed thumbnail in email
     include_snapshot: false   # Dont embed full snapshot in email
 
@@ -123,42 +123,42 @@ notifications:
       object_type: 'dog|cat'
       hysteresis_seconds: 300
       min_score: 0.85
-      subject_template: "🐕 {camera_nice}: Animal seen inside"
+      subject_template: "🐕🏠 {camera_nice}: Animal seen inside"
 
     - camera: 'IndoorCam.*'
       object_type: 'person'
       hysteresis_seconds: 900
-      min_score: 0.85
-      subject_template: "🧑‍🦱 {camera_nice}: Person seen inside"
+      min_score: 0.90
+      subject_template: "🧑‍🦱🏠 {camera_nice}: Person seen inside"
 
     # - camera: 'OutdoorCam.*'
     #   object_type: 'dog|cat'
     #   hysteresis_seconds: 300
     #   min_score: 0.85
-    #   subject_template: "🐕 {camera_nice}: Animal seen outside"
+    #   subject_template: "🐕🌳 {camera_nice}: Animal seen outside"
 
     - camera: 'OutdoorCam.*'
       object_type: 'person'
       hysteresis_seconds: 900
-      min_score: 0.85
-      subject_template: "🧑‍🦱 {camera_nice}: Person seen outside"
+      min_score: 0.90
+      subject_template: "🧑‍🦱🌳 {camera_nice}: Person seen outside"
 
     - camera: 'DoorbellCam.*'
       object_type: 'person'
       hysteresis_seconds: 120
       min_score: 0.80
-      subject_template: "🚪 {camera_nice}: Person seen at door"
+      subject_template: "🧑‍🦱🚪 {camera_nice}: Person seen at door"
 
     # - camera: 'DoorbellCam.*'
     #   object_type: 'dog|cat'
     #   hysteresis_seconds: 600
     #   min_score: 0.50
-    #   subject_template: "🚪 {camera_nice}: Animal seen at door"
+    #   subject_template: "🐕🚪 {camera_nice}: Animal seen at door"
 
     - camera: 'DoorbellCam.*'
       object_type: 'doorbell_press'
       hysteresis_seconds: 15
       min_score: 0.80
-      subject_template: "🚪 {camera_nice}: Doorbell rung"
+      subject_template: "🔔🚪 {camera_nice}: Doorbell rung"
       include_thumbnail: false
       include_urls: false

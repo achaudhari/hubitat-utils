@@ -53,18 +53,40 @@ detect:
   enabled: true
 detectors:
   ov:
+    # # Use for /config/model_cache/yolov9-*.onnx
+    # type: onnx
+    # device: GPU
+    # Use for /openvino-model/ssdlite_mobilenet_v2.xml
     type: openvino
     device: AUTO    # Works on NPU → GPU → CPU
 
 # ML and HW acceleration settings
 # -------------------------------
-model:
+model:  # Default model
   width: 300
   height: 300
   input_tensor: nhwc
   input_pixel_format: bgr
   path: /openvino-model/ssdlite_mobilenet_v2.xml
   labelmap_path: /openvino-model/coco_91cl_bkgr.txt
+
+# model:    # For better accuracy (slower)
+#   model_type: yolo-generic
+#   width: 640
+#   height: 640
+#   input_tensor: nchw
+#   input_dtype: float
+#   path: /config/model_cache/yolov9-s-640.onnx
+#   labelmap_path: /labelmap/coco-80.txt
+
+# model:    # For more cameras (faster)
+#   model_type: yolo-generic
+#   width: 320
+#   height: 320
+#   input_tensor: nchw
+#   input_dtype: float
+#   path: /config/model_cache/yolov9-t-320.onnx
+#   labelmap_path: /labelmap/coco-80.txt
 
 ffmpeg:
   hwaccel_args:
