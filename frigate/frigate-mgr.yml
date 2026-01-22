@@ -6,7 +6,7 @@
 # SMTP Email Configuration
 # ------------------------
 smtp:
-  host: 192.168.1.251
+  host: smtp-relay.heliologic.lan
   port: 25
   # username: your-email@gmail.com
   # password: your-app-password

@@ -218,31 +218,31 @@ def main():
         epilog='''
 Examples:
   # Monitor all events
-  %(prog)s --host 192.168.1.100 monitor
+  %(prog)s --host hlab-nvr-n0.host monitor
 
   # Monitor for 60 seconds
-  %(prog)s --host 192.168.1.100 monitor --duration 60
+  %(prog)s --host hlab-nvr-n0.host monitor --duration 60
 
   # List all cameras
-  %(prog)s --host 192.168.1.100 list-cameras
+  %(prog)s --host hlab-nvr-n0.host list-cameras
 
   # List cameras with longer discovery wait time
-  %(prog)s --host 192.168.1.100 list-cameras --wait 5
+  %(prog)s --host hlab-nvr-n0.host list-cameras --wait 5
 
   # Enable detection on a camera
-  %(prog)s --host 192.168.1.100 command --camera front_door --command enable-detection
+  %(prog)s --host hlab-nvr-n0.host command --camera front_door --command enable-detection
 
   # Take a snapshot
-  %(prog)s --host 192.168.1.100 command --camera front_door --command take-snapshot
+  %(prog)s --host hlab-nvr-n0.host command --camera front_door --command take-snapshot
 
   # Enable recording
-  %(prog)s --host 192.168.1.100 command --camera front_door --command enable-recording
+  %(prog)s --host hlab-nvr-n0.host command --camera front_door --command enable-recording
 
   # PTZ movement
-  %(prog)s --host 192.168.1.100 command --camera front_door --command ptz-move-up
+  %(prog)s --host hlab-nvr-n0.host command --camera front_door --command ptz-move-up
 
   # Restart Frigate
-  %(prog)s --host 192.168.1.100 command --command restart
+  %(prog)s --host hlab-nvr-n0.host command --command restart
 
 Available Commands:
   Camera:

@@ -18,7 +18,7 @@
 
 (authelia) {
 	# Forward authentication to Authelia
-	forward_auth 192.168.1.251:9091 {
+	forward_auth hlab-websvr-n0.host:9091 {
 		uri /api/verify?rd=https://auth.heliologic.xyz
 		copy_headers Remote-User Remote-Groups Remote-Name Remote-Email
 		# Pass original request info to Authelia
@@ -32,7 +32,7 @@
 http://hubitat.heliologic.xyz {
 
 	import authelia
-	reverse_proxy 192.168.1.192:80
+	reverse_proxy hlab-hubitat.host:80
 	import security_headers
 
 	log {
@@ -45,7 +45,7 @@ http://hubitat.heliologic.xyz {
 
 http://hubitat.heliologic.lan {
 
-	reverse_proxy 192.168.1.192:80
+	reverse_proxy hlab-hubitat.host:80
 
 	log {
 		output file /var/log/caddy/hubitat.log {
@@ -84,7 +84,7 @@ http://monitor-hauto.heliologic.lan {
 http://cameras.heliologic.xyz {
 
 	import authelia
-	reverse_proxy 192.168.1.249:8971
+	reverse_proxy hlab-nvr-n0.host:8971
 	import security_headers
 
 	log {
@@ -97,7 +97,7 @@ http://cameras.heliologic.xyz {
 
 http://cameras.heliologic.lan {
 
-	reverse_proxy 192.168.1.249:8971
+	reverse_proxy hlab-nvr-n0.host:8971
 
 	log {
 		output file /var/log/caddy/cameras.log {
