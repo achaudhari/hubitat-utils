@@ -97,10 +97,39 @@ ffmpeg:
     - -hwaccel_output_format
     - yuv420p
 
+# Face Recognition Configuration
+# -----------------------------
+# Source: https://docs.frigate.video/configuration/face_recognition/
+# Face recognition identifies known individuals by matching detected faces with
+# previously learned facial data. When a known person is recognized, their name 
+# will be added as a sub_label.
+face_recognition:
+  enabled: false
+  # Model size options: 'small' (CPU-optimized) or 'large' (GPU-accelerated, more accurate)
+  # Source: https://docs.frigate.video/configuration/face_recognition/#face-recognition
+  # The 'large' model requires GPU acceleration and provides better accuracy
+  model_size: large
+  # Face detection confidence threshold (default: 0.7)
+  detection_threshold: 0.7
+  # Min face area in pixels before recognition runs (default: 500)
+  min_area: 500
+  # Recognition confidence score to add face as sub label (default: 0.9)
+  recognition_threshold: 0.9
+  # Min score to mark as potential match vs unknown (default: 0.8)
+  unknown_score: 0.8
+  # Min face recognitions for sub label to be applied (default: 1)
+  min_faces: 1
+  # Number of recognized face images to save for training (default: 100)
+  save_attempts: 100
+  # Enable blur detection filter to adjust confidence (default: true)
+  blur_confidence_filter: true
+
 # Object tracking configuration
 # -----------------------------
 objects:
   # Specify which objects to track
+  # Note: 'person' is required for face recognition to work
+  # Source: https://docs.frigate.video/configuration/face_recognition/#model-requirements
   track:
     - person
     - cat
