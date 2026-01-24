@@ -12,9 +12,9 @@ services:
       - ./caddy/config:/config
       - ./caddy/logs:/var/log/caddy
     extra_hosts:
-      - "websvr-n0:192.168.1.251"
-      - "hubitat:192.168.1.192"
-      - "nvr-n0:192.168.1.249"
+      - "hlab-websvr-nx.host:192.168.1.250"
+      - "hlab-hubitat.host:192.168.1.192"
+      - "hlab-nvr-n0.host:192.168.1.249"
 
   # Cloudflared - Web access
   cloudflared_0:
@@ -24,8 +24,6 @@ services:
     command: tunnel --loglevel info --no-autoupdate run --token ${TOKEN_HLAB_HAUTO_HELIOLOGIC_XYZ}
     environment:
       - TOKEN_HLAB_HAUTO_HELIOLOGIC_XYZ=${TOKEN_HLAB_HAUTO_HELIOLOGIC_XYZ}
-    volumes:
-      - ./cloudflared_0:/etc/cloudflared
 
   cloudflared_1:
     image: cloudflare/cloudflared:latest
@@ -34,8 +32,6 @@ services:
     command: tunnel --loglevel info --no-autoupdate run --token ${TOKEN_HLAB_HAUTO_HELIOLOGIC_XYZ}
     environment:
       - TOKEN_HLAB_HAUTO_HELIOLOGIC_XYZ=${TOKEN_HLAB_HAUTO_HELIOLOGIC_XYZ}
-    volumes:
-      - ./cloudflared_1:/etc/cloudflared
 
   # InfluxDB - Time-series database for sensor data
   influxdb:

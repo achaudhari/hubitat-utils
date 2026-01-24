@@ -18,7 +18,7 @@
 
 (authelia) {
 	# Forward authentication to Authelia
-	forward_auth hlab-websvr-n0.host:9091 {
+	forward_auth hlab-websvr-nx.host:9091 {
 		uri /api/verify?rd=https://auth.heliologic.xyz
 		copy_headers Remote-User Remote-Groups Remote-Name Remote-Email
 		# Pass original request info to Authelia
